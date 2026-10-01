@@ -1,6 +1,7 @@
 /* Throughput of the sequential fills and the scalar chain. Build: make bench. */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #include "../tandem.h"
@@ -31,6 +32,13 @@ int main(void) {
     float *f32 = malloc(n * sizeof *f32);
     tandem_rng rng = tandem_seed(42, 0, 0);
     volatile double sink = 0;
+
+    /* Touch every buffer and run for half a second so the clock has ramped up. */
+    memset(u32, 0, n * sizeof *u32);
+    memset(u64, 0, n * sizeof *u64);
+    memset(f64, 0, n * sizeof *f64);
+    memset(f32, 0, n * sizeof *f32);
+    for (double t0 = now(); now() - t0 < 0.5;) tandem_fill_u32(&rng, u32, n);
 
     BENCH("fill_u32", n * 4, tandem_fill_u32(&rng, u32, n));
     BENCH("fill_u64", n * 8, tandem_fill_u64(&rng, u64, n));

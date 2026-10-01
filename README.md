@@ -12,9 +12,10 @@ the same stream, bit for bit, for every type it supports.
   `double`, binary16 as bit patterns, Unicode scalars, and complex pairs. Signed integers are
   the unsigned draws reinterpreted. Random access without advancing. Split by index, fork at
   the current block, sub by purpose.
-- The eight chunks of a row step together. With GCC or clang the step is written with vector
-  extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD` for the scalar step.
-  Fills copy whole 128-byte rows out of the cache.
+- The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
+  written with vector extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD`
+  for the scalar version. After alignment every integer fill is one byte stream, so one
+  routine serves all widths and floats convert in place.
 
 ## Use
 
@@ -45,20 +46,20 @@ access against dumps written by TandemRNG.jl with `tools/dump_streams.jl`.
 
 ## Speed
 
-Apple M4, one thread, `make bench` (clang, `-O2`), minimum of seven runs of 2^24 elements:
+Apple M4, one thread, `make bench` (clang, `-O2`), minimum of seven runs of 2^24 elements
+after a warm-up:
 
-| | GiB/s | with `TANDEM_NO_SIMD` |
-|---|---|---|
-| `tandem_fill_u32` | 8.6 | 8.0 |
-| `tandem_fill_u64` | 8.5 | 8.1 |
-| `tandem_fill_f32` | 10.0 | 9.3 |
-| `tandem_fill_f64` | 9.4 | 8.8 |
-| `tandem_next_f64` chain | 3.7 | 2.9 |
+| | GiB/s | with `TANDEM_NO_SIMD` | TandemRNG.jl |
+|---|---|---|---|
+| `tandem_fill_u32` | 14.4 | 11.4 | 18 |
+| `tandem_fill_u64` | 14.4 | 11.2 | |
+| `tandem_fill_f32` | 11.3 | 8.9 | |
+| `tandem_fill_f64` | 11.3 | 9.0 | 14 |
+| `tandem_next_f64` chain, ns per draw | 1.75 | 2.0 | 1.0 |
 
-clang vectorizes the scalar eight-lane step on its own, so the explicit vector path adds
-little on this compiler. It is there for compilers that do not. TandemRNG.jl reaches 14 to
-18 GiB/s on the same machine with its hand-shuffled `Lane8` core, so this C is a correct and
-reasonably fast reference, not the speed ceiling.
+The row loop keeps the eight lane states in registers and stores each row by a vector
+transpose, which is where the throughput comes from. Float fills pay a second pass for the
+conversion. The Julia column is the same machine from TandemRNG.jl's README.
 
 ## License
 

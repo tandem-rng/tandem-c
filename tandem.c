@@ -14,9 +14,7 @@
 static const uint32_t RC[8] = {0xd17cc1b7u, 0xa7220a94u, 0xfe13abe8u, 0xfa9a6ee0u,
                                0xedb14accu, 0x9e21c820u, 0xff28b1d5u, 0xef5de2b0u};
 
-static inline uint32_t rotl(uint32_t x, unsigned r) {
-    return (x << r) | (x >> ((32u - r) & 31u));
-}
+static inline uint32_t rotl(uint32_t x, unsigned r) { return (x << r) | (x >> (32u - r)); }
 
 void tandem_T(uint32_t o[4], uint32_t h[4]) {
     uint64_t p0 = (uint64_t)o[0] * (h[0] | 1u);
@@ -57,7 +55,7 @@ void tandem_F_keyed(const uint32_t key[4], uint64_t counter, uint32_t domain, ui
     o[1] = (uint32_t)(counter >> 32);
     o[2] = domain;
     o[3] = aux;
-    memcpy(h, key, 4 * sizeof *key);
+    memcpy(h, key, 16);
     tandem_F(o, h);
 }
 
@@ -67,102 +65,214 @@ void tandem_block(const uint32_t key[4], uint64_t c, uint32_t j, uint32_t out[4]
     for (uint32_t s = 0; s <= j; s++) tandem_T(out, h);
 }
 
-/* The row cache is word-major: o[w][lane]. One T over all eight lanes is then four
- * element-wise vector operations per word, which is how the GPU and the Julia Lane8 core
- * see it. With GCC or clang the step uses vector extensions, four lanes at a time, so it
- * compiles to NEON or SSE/AVX without intrinsics. */
-#if defined(__GNUC__) && !defined(TANDEM_NO_SIMD)
+/* ---- Eight lanes ---------------------------------------------------------------------
+ *
+ * A row is the eight chunks of a group at one step, so the cache is word-major, o[word][lane],
+ * and one T over a row is four element-wise operations per word. The `lanes` type holds that
+ * state in registers inside the row loop. With GCC 12+ or clang it is built from vector
+ * extensions and compiles to NEON or SSE/AVX; the scalar version below it is the same
+ * loop written out, for other compilers or -DTANDEM_NO_SIMD. */
+
+#if (defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 12)) && !defined(TANDEM_NO_SIMD)
 typedef uint32_t u32x4 __attribute__((vector_size(16)));
 typedef uint64_t u64x4 __attribute__((vector_size(32)));
 
+typedef struct {
+    u32x4 o[4], h[4]; /* four lanes of each word */
+} quad;
+
+typedef struct {
+    quad q[2];
+} lanes;
+
 static inline u32x4 vrotl(u32x4 x, unsigned r) { return (x << r) | (x >> (32u - r)); }
 
-static inline void T4(uint32_t o[4][8], uint32_t h[4][8], unsigned half) {
-    u32x4 o0, o1, o2, o3, h0, h1, h2, h3;
-    u64x4 p0, p1;
-    u32x4 lo0, hi0, lo1, hi1, n0, n1, n2, n3;
-    unsigned l = 4u * half;
-    memcpy(&o0, &o[0][l], 16);
-    memcpy(&o1, &o[1][l], 16);
-    memcpy(&o2, &o[2][l], 16);
-    memcpy(&o3, &o[3][l], 16);
-    memcpy(&h0, &h[0][l], 16);
-    memcpy(&h1, &h[1][l], 16);
-    memcpy(&h2, &h[2][l], 16);
-    memcpy(&h3, &h[3][l], 16);
+static inline void quad_T(quad *q) {
+    u32x4 *o = q->o, *h = q->h;
+    u64x4 p0 = __builtin_convertvector(o[0], u64x4) * __builtin_convertvector(h[0] | 1u, u64x4);
+    u64x4 p1 = __builtin_convertvector(o[2], u64x4) * __builtin_convertvector(h[1] | 1u, u64x4);
+    u32x4 lo0 = __builtin_convertvector(p0, u32x4), hi0 = __builtin_convertvector(p0 >> 32, u32x4);
+    u32x4 lo1 = __builtin_convertvector(p1, u32x4), hi1 = __builtin_convertvector(p1 >> 32, u32x4);
+    u32x4 n0 = o[1] ^ hi1 ^ lo1;
+    u32x4 n1 = vrotl(lo1, 16) ^ h[2];
+    u32x4 n2 = o[3] ^ hi0 ^ lo0;
+    u32x4 n3 = vrotl(lo0, 16) ^ h[3];
 
-    p0 = __builtin_convertvector(o0, u64x4) * __builtin_convertvector(h0 | 1u, u64x4);
-    p1 = __builtin_convertvector(o2, u64x4) * __builtin_convertvector(h1 | 1u, u64x4);
-    lo0 = __builtin_convertvector(p0, u32x4);
-    hi0 = __builtin_convertvector(p0 >> 32, u32x4);
-    lo1 = __builtin_convertvector(p1, u32x4);
-    hi1 = __builtin_convertvector(p1 >> 32, u32x4);
-    n0 = o1 ^ hi1 ^ lo1;
-    n1 = vrotl(lo1, 16) ^ h2;
-    n2 = o3 ^ hi0 ^ lo0;
-    n3 = vrotl(lo0, 16) ^ h3;
+    h[0] ^= vrotl(h[1], 7);
+    h[1] ^= vrotl(h[2], 13);
+    h[2] ^= vrotl(h[3], 22);
+    h[3] ^= vrotl(h[0], 3);
+    h[0] = (h[0] + CLOCK_WEYL) ^ n0;
 
-    h0 ^= vrotl(h1, 7);
-    h1 ^= vrotl(h2, 13);
-    h2 ^= vrotl(h3, 22);
-    h3 ^= vrotl(h0, 3);
-    h0 = (h0 + CLOCK_WEYL) ^ n0;
-
-    memcpy(&o[0][l], &n0, 16);
-    memcpy(&o[1][l], &n1, 16);
-    memcpy(&o[2][l], &n2, 16);
-    memcpy(&o[3][l], &n3, 16);
-    memcpy(&h[0][l], &h0, 16);
-    memcpy(&h[1][l], &h1, 16);
-    memcpy(&h[2][l], &h2, 16);
-    memcpy(&h[3][l], &h3, 16);
+    o[0] = n0;
+    o[1] = n1;
+    o[2] = n2;
+    o[3] = n3;
 }
 
-static void T8(uint32_t o[4][8], uint32_t h[4][8]) {
-    T4(o, h, 0);
-    T4(o, h, 1);
+/* F on chunks c0 .. c0+3 at once. */
+static void quad_seed(quad *q, const uint32_t key[4], uint64_t c0) {
+    uint32_t lo = (uint32_t)c0;
+    u32x4 counter = {lo, lo + 1u, lo + 2u, lo + 3u}, zero = {0, 0, 0, 0};
+    q->o[0] = counter;
+    q->o[1] = zero + (uint32_t)(c0 >> 32);
+    q->o[2] = zero + DOMAIN_STREAM;
+    q->o[3] = zero + AUX_STREAM;
+    for (unsigned w = 0; w < 4; w++) q->h[w] = zero + key[w];
+    for (int r = 0; r < 8; r++) {
+        u32x4 t[4];
+        quad_T(q);
+        q->o[0] ^= RC[r];
+        memcpy(t, q->o, sizeof t);
+        memcpy(q->o, q->h, sizeof t);
+        memcpy(q->h, t, sizeof t);
+    }
+}
+
+/* The four blocks of a quad in stream order: a 4x4 word transpose. */
+static inline void quad_store(const quad *q, char *dst) {
+    u32x4 t0 = __builtin_shufflevector(q->o[0], q->o[1], 0, 4, 1, 5);
+    u32x4 t1 = __builtin_shufflevector(q->o[2], q->o[3], 0, 4, 1, 5);
+    u32x4 t2 = __builtin_shufflevector(q->o[0], q->o[1], 2, 6, 3, 7);
+    u32x4 t3 = __builtin_shufflevector(q->o[2], q->o[3], 2, 6, 3, 7);
+    u32x4 b0 = __builtin_shufflevector(t0, t1, 0, 1, 4, 5);
+    u32x4 b1 = __builtin_shufflevector(t0, t1, 2, 3, 6, 7);
+    u32x4 b2 = __builtin_shufflevector(t2, t3, 0, 1, 4, 5);
+    u32x4 b3 = __builtin_shufflevector(t2, t3, 2, 3, 6, 7);
+    memcpy(dst, &b0, 16);
+    memcpy(dst + 16, &b1, 16);
+    memcpy(dst + 32, &b2, 16);
+    memcpy(dst + 48, &b3, 16);
+}
+
+static inline void lanes_load(lanes *L, const tandem_rng *rng) {
+    for (unsigned w = 0; w < 4; w++)
+        for (unsigned k = 0; k < 2; k++) {
+            memcpy(&L->q[k].o[w], &rng->o[w][4u * k], 16);
+            memcpy(&L->q[k].h[w], &rng->h[w][4u * k], 16);
+        }
+}
+
+static inline void lanes_save(const lanes *L, tandem_rng *rng) {
+    for (unsigned w = 0; w < 4; w++)
+        for (unsigned k = 0; k < 2; k++) {
+            memcpy(&rng->o[w][4u * k], &L->q[k].o[w], 16);
+            memcpy(&rng->h[w][4u * k], &L->q[k].h[w], 16);
+        }
+}
+
+static inline void lanes_T(lanes *L) {
+    quad_T(&L->q[0]);
+    quad_T(&L->q[1]);
+}
+
+static inline void lanes_seed(lanes *L, const uint32_t key[4], uint64_t g) {
+    quad_seed(&L->q[0], key, 8u * g);
+    quad_seed(&L->q[1], key, 8u * g + 4u);
+}
+
+static inline void lanes_store(const lanes *L, char *dst) {
+    quad_store(&L->q[0], dst);
+    quad_store(&L->q[1], dst + 64);
 }
 #else
-static void T8(uint32_t o[4][8], uint32_t h[4][8]) {
+typedef struct {
+    uint32_t o[4][8], h[4][8];
+} lanes;
+
+static inline void lanes_load(lanes *L, const tandem_rng *rng) {
+    memcpy(L->o, rng->o, sizeof L->o);
+    memcpy(L->h, rng->h, sizeof L->h);
+}
+
+static inline void lanes_save(const lanes *L, tandem_rng *rng) {
+    memcpy(rng->o, L->o, sizeof L->o);
+    memcpy(rng->h, L->h, sizeof L->h);
+}
+
+static inline void lanes_T(lanes *L) {
     for (unsigned l = 0; l < 8; l++) {
-        uint32_t ol[4] = {o[0][l], o[1][l], o[2][l], o[3][l]};
-        uint32_t hl[4] = {h[0][l], h[1][l], h[2][l], h[3][l]};
-        tandem_T(ol, hl);
+        uint32_t o[4] = {L->o[0][l], L->o[1][l], L->o[2][l], L->o[3][l]};
+        uint32_t h[4] = {L->h[0][l], L->h[1][l], L->h[2][l], L->h[3][l]};
+        tandem_T(o, h);
         for (unsigned w = 0; w < 4; w++) {
-            o[w][l] = ol[w];
-            h[w][l] = hl[w];
+            L->o[w][l] = o[w];
+            L->h[w][l] = h[w];
         }
     }
+}
+
+static inline void lanes_seed(lanes *L, const uint32_t key[4], uint64_t g) {
+    for (unsigned l = 0; l < 8; l++) {
+        uint32_t o[4], h[4];
+        tandem_F_keyed(key, 8u * g + l, DOMAIN_STREAM, AUX_STREAM, o, h);
+        for (unsigned w = 0; w < 4; w++) {
+            L->o[w][l] = o[w];
+            L->h[w][l] = h[w];
+        }
+    }
+}
+
+static inline void lanes_store(const lanes *L, char *dst) {
+    uint32_t row[32];
+    for (unsigned l = 0; l < 8; l++)
+        for (unsigned w = 0; w < 4; w++) row[4u * l + w] = L->o[w][l];
+    memcpy(dst, row, sizeof row);
 }
 #endif
 
-static inline uint64_t row_group(const tandem_rng *rng, uint64_t row) { return row / rng->K; }
-static inline uint32_t row_step(const tandem_rng *rng, uint64_t row) {
-    return (uint32_t)(row & (rng->K - 1u));
+/* ---- Rows ------------------------------------------------------------------------------ */
+
+static inline unsigned log2k(uint32_t K) {
+    unsigned s = 0;
+    while ((K >> s) > 1u) s++;
+    return s;
 }
 
-/* Make the cache hold the eight blocks of `row`. Stepping forward inside the cached group
- * costs one T8 per row. Anything else reseeds the group. */
-static void load_row(tandem_rng *rng, uint64_t row) {
-    if (rng->cached && rng->row == row) return;
-    if (rng->cached && row > rng->row && row_group(rng, row) == row_group(rng, rng->row)) {
-        for (uint64_t r = rng->row; r < row; r++) T8(rng->o, rng->h);
-    } else {
-        uint64_t g = row_group(rng, row);
-        uint32_t j = row_step(rng, row);
-        for (unsigned l = 0; l < 8; l++) {
-            uint32_t ol[4], hl[4];
-            tandem_F_keyed(rng->key, 8u * g + l, DOMAIN_STREAM, AUX_STREAM, ol, hl);
-            for (unsigned w = 0; w < 4; w++) {
-                rng->o[w][l] = ol[w];
-                rng->h[w][l] = hl[w];
+/* Produce rows [row, row + nrows) in stream order, 128 bytes each, into `out`, or only move
+ * the cache when out is NULL. Stepping forward inside the cached group costs one T per row;
+ * any other jump reseeds the group. Afterwards the cache holds the last row produced. */
+static void run_rows(tandem_rng *rng, uint64_t row, size_t nrows, char *out) {
+    unsigned shift = log2k(rng->K);
+    uint64_t mask = rng->K - 1u, at = rng->row;
+    int live = rng->cached != 0;
+    lanes L;
+
+    if (nrows == 0) return;
+    lanes_load(&L, rng);
+    while (nrows) {
+        size_t run = rng->K - (size_t)(row & mask); /* rows left in this group */
+        if (!live || at != row) {
+            if (live && row > at && (row >> shift) == (at >> shift)) {
+                for (uint64_t r = at; r < row; r++) lanes_T(&L);
+            } else {
+                lanes_seed(&L, rng->key, row >> shift);
+                for (uint64_t s = 0; s <= (row & mask); s++) lanes_T(&L);
+            }
+            live = 1;
+        }
+        if (run > nrows) run = nrows;
+        for (size_t r = 0; r < run; r++) {
+            if (r) lanes_T(&L);
+            if (out) {
+                lanes_store(&L, out);
+                out += 128;
             }
         }
-        for (uint32_t s = 0; s <= j; s++) T8(rng->o, rng->h);
+        at = row + run - 1u;
+        row += run;
+        nrows -= run;
     }
-    rng->row = row;
+    lanes_save(&L, rng);
+    rng->row = at;
     rng->cached = 1u;
 }
+
+static inline void load_row(tandem_rng *rng, uint64_t row) {
+    if (!rng->cached || rng->row != row) run_rows(rng, row, 1, NULL);
+}
+
+/* ---- Reads ----------------------------------------------------------------------------- */
 
 static inline uint64_t align_pos(uint64_t pos, unsigned w) {
     return (pos + w - 1u) & ~((uint64_t)w - 1u);
@@ -172,37 +282,25 @@ static inline uint32_t word_at(const tandem_rng *rng, uint64_t p) {
     return rng->o[(p >> 5) & 3u][(p >> 7) & 7u];
 }
 
-/* Read w bits (8 <= w <= 64, a power of two) at an aligned position. */
-static uint64_t read_bits(tandem_rng *rng, uint64_t p, unsigned w) {
-    uint64_t raw;
+/* w bits (1 <= w <= 64, a power of two) at an aligned position. */
+static inline uint64_t read(tandem_rng *rng, uint64_t p, unsigned w) {
     load_row(rng, p >> 10);
-    if (w <= 32u) {
-        raw = word_at(rng, p) >> (p & 31u);
-        if (w < 32u) raw &= (1u << w) - 1u;
-    } else {
-        raw = word_at(rng, p) | ((uint64_t)word_at(rng, p + 32u) << 32);
-    }
-    return raw;
+    if (w == 64u) return word_at(rng, p) | ((uint64_t)word_at(rng, p + 32u) << 32);
+    return (word_at(rng, p) >> (p & 31u)) & (0xffffffffu >> (32u - w));
 }
 
-static bool read_bit(tandem_rng *rng, uint64_t p) {
-    load_row(rng, p >> 10);
-    return (word_at(rng, p) >> (p & 31u)) & 1u;
-}
-
-static tandem_u128 read_u128(tandem_rng *rng, uint64_t p) {
-    tandem_u128 v;
-    load_row(rng, p >> 10);
-    v.lo = word_at(rng, p) | ((uint64_t)word_at(rng, p + 32u) << 32);
-    v.hi = word_at(rng, p + 64u) | ((uint64_t)word_at(rng, p + 96u) << 32);
-    return v;
+/* Draw w bits: align, advance, read. */
+static inline uint64_t next(tandem_rng *rng, unsigned w) {
+    uint64_t p = align_pos(rng->pos, w);
+    rng->pos = p + w;
+    return read(rng, p, w);
 }
 
 static inline double to_f64(uint64_t raw) { return (double)(raw >> 11) * 0x1p-53; }
 static inline float to_f32(uint32_t raw) { return (float)(raw >> 8) * 0x1p-24f; }
 
-/* (raw >> 5) * 2^-11 as binary16 bits. Every such value is zero or a normal half with the
- * 11-bit integer k = raw >> 5 as its significand, so the encoding is exact. */
+/* (raw >> 5) * 2^-11 as binary16 bits. Every such value is zero or a normal half whose
+ * significand is the 11-bit integer k = raw >> 5, so the encoding is exact. */
 static uint16_t to_f16_bits(uint16_t raw) {
     unsigned k = raw >> 5, m = 0;
     if (k == 0) return 0;
@@ -210,19 +308,20 @@ static uint16_t to_f16_bits(uint16_t raw) {
     return (uint16_t)(((m + 4u) << 10) | ((k << (10u - m)) & 0x3ffu));
 }
 
-/* floor(raw * 1112064 / 2^64) by the full product, then skip the surrogate range.
- * raw * m = a * m * 2^32 + b * m with both partial products below 2^53, so the high
- * 64 bits of the product are (a * m + (b * m >> 32)) >> 32. */
+/* floor(raw * 1112064 / 2^64), then skip the surrogate range. The partial products
+ * a * m and b * m are below 2^53, so the high word is (a * m + (b * m >> 32)) >> 32. */
 static uint32_t to_char(uint64_t raw) {
     uint64_t a = raw >> 32, b = raw & 0xffffffffu, m = 1112064u;
     uint64_t hi = (a * m + ((b * m) >> 32)) >> 32;
     return (uint32_t)(hi < 0xd800u ? hi : hi + 0x800u);
 }
 
+/* ---- Public: construction and transport ------------------------------------------------ */
+
 tandem_rng tandem_from_key(const uint32_t key[4], uint64_t pos, uint32_t K) {
     tandem_rng rng;
     memset(&rng, 0, sizeof rng);
-    memcpy(rng.key, key, sizeof rng.key);
+    memcpy(rng.key, key, 16);
     rng.pos = pos;
     rng.K = K ? K : TANDEM_DEFAULT_K;
     return rng;
@@ -236,38 +335,30 @@ tandem_rng tandem_seed(uint64_t seed_lo, uint64_t seed_hi, uint32_t K) {
     return tandem_from_key(o, 0, K);
 }
 
-void tandem_key(const tandem_rng *rng, uint32_t key[4]) { memcpy(key, rng->key, 4 * sizeof *key); }
+void tandem_key(const tandem_rng *rng, uint32_t key[4]) { memcpy(key, rng->key, 16); }
 uint64_t tandem_position(const tandem_rng *rng) { return rng->pos; }
 uint32_t tandem_chunk_length(const tandem_rng *rng) { return rng->K; }
 
-bool tandem_next_bool(tandem_rng *rng) {
-    uint64_t p = rng->pos;
-    rng->pos = p + 1u;
-    return read_bit(rng, p);
-}
+/* ---- Public: scalar draws --------------------------------------------------------------- */
 
-#define NEXT_INT(name, type, w)                                                                    \
-    type name(tandem_rng *rng) {                                                                   \
-        uint64_t p = align_pos(rng->pos, w);                                                       \
-        rng->pos = p + w;                                                                          \
-        return (type)read_bits(rng, p, w);                                                         \
-    }
-NEXT_INT(tandem_next_u8, uint8_t, 8u)
-NEXT_INT(tandem_next_u16, uint16_t, 16u)
-NEXT_INT(tandem_next_u32, uint32_t, 32u)
-NEXT_INT(tandem_next_u64, uint64_t, 64u)
-#undef NEXT_INT
+bool tandem_next_bool(tandem_rng *rng) { return next(rng, 1) != 0; }
+uint8_t tandem_next_u8(tandem_rng *rng) { return (uint8_t)next(rng, 8); }
+uint16_t tandem_next_u16(tandem_rng *rng) { return (uint16_t)next(rng, 16); }
+uint32_t tandem_next_u32(tandem_rng *rng) { return (uint32_t)next(rng, 32); }
+uint64_t tandem_next_u64(tandem_rng *rng) { return next(rng, 64); }
+float tandem_next_f32(tandem_rng *rng) { return to_f32((uint32_t)next(rng, 32)); }
+double tandem_next_f64(tandem_rng *rng) { return to_f64(next(rng, 64)); }
+uint16_t tandem_next_f16_bits(tandem_rng *rng) { return to_f16_bits((uint16_t)next(rng, 16)); }
+uint32_t tandem_next_char(tandem_rng *rng) { return to_char(next(rng, 64)); }
 
 tandem_u128 tandem_next_u128(tandem_rng *rng) {
-    uint64_t p = align_pos(rng->pos, 128u);
+    uint64_t p = align_pos(rng->pos, 128);
+    tandem_u128 v;
+    v.lo = read(rng, p, 64);
+    v.hi = read(rng, p + 64u, 64);
     rng->pos = p + 128u;
-    return read_u128(rng, p);
+    return v;
 }
-
-float tandem_next_f32(tandem_rng *rng) { return to_f32(tandem_next_u32(rng)); }
-double tandem_next_f64(tandem_rng *rng) { return to_f64(tandem_next_u64(rng)); }
-uint16_t tandem_next_f16_bits(tandem_rng *rng) { return to_f16_bits(tandem_next_u16(rng)); }
-uint32_t tandem_next_char(tandem_rng *rng) { return to_char(tandem_next_u64(rng)); }
 
 void tandem_next_c32(tandem_rng *rng, float out[2]) {
     out[0] = tandem_next_f32(rng);
@@ -279,82 +370,79 @@ void tandem_next_c64(tandem_rng *rng, double out[2]) {
     out[1] = tandem_next_f64(rng);
 }
 
+/* ---- Public: fills ---------------------------------------------------------------------- */
+
+/* After alignment to its width, every integer fill is the same little-endian byte stream:
+ * single bytes up to the first row boundary, whole rows from run_rows, single bytes after. */
+static void fill_raw(tandem_rng *rng, void *out, size_t n, unsigned w) {
+    uint64_t p = align_pos(rng->pos, w);
+    size_t nbytes = n * (w / 8u);
+    char *dst = out;
+
+    rng->pos = p + n * (uint64_t)w;
+    for (; nbytes && (p & 1023u); nbytes--, p += 8u) *dst++ = (char)read(rng, p, 8);
+    if (nbytes >= 128u) {
+        size_t nrows = nbytes / 128u;
+        run_rows(rng, p >> 10, nrows, dst);
+        dst += nrows * 128u;
+        p += nrows * 1024u;
+        nbytes -= nrows * 128u;
+    }
+    for (; nbytes; nbytes--, p += 8u) *dst++ = (char)read(rng, p, 8);
+}
+
+void tandem_fill_u8(tandem_rng *rng, uint8_t *out, size_t n) { fill_raw(rng, out, n, 8); }
+void tandem_fill_u16(tandem_rng *rng, uint16_t *out, size_t n) { fill_raw(rng, out, n, 16); }
+void tandem_fill_u32(tandem_rng *rng, uint32_t *out, size_t n) { fill_raw(rng, out, n, 32); }
+void tandem_fill_u64(tandem_rng *rng, uint64_t *out, size_t n) { fill_raw(rng, out, n, 64); }
+void tandem_fill_u128(tandem_rng *rng, tandem_u128 *out, size_t n) { fill_raw(rng, out, n, 128); }
+
 void tandem_fill_bool(tandem_rng *rng, bool *out, size_t n) {
     for (size_t i = 0; i < n; i++) out[i] = tandem_next_bool(rng);
 }
 
-/* Copy the cached row out as 32 words in stream order (lane-major). */
-static inline void row_words(const tandem_rng *rng, uint32_t row[32]) {
-    for (unsigned l = 0; l < 8; l++)
-        for (unsigned w = 0; w < 4; w++) row[4u * l + w] = rng->o[w][l];
+void tandem_fill_f32(tandem_rng *rng, float *out, size_t n) {
+    fill_raw(rng, out, n, 32);
+    for (size_t i = 0; i < n; i++) {
+        uint32_t raw;
+        memcpy(&raw, out + i, 4);
+        out[i] = to_f32(raw);
+    }
 }
 
-/* Element e of width w (8 <= w <= 64) inside a row buffer. */
-static inline uint64_t row_bits(const uint32_t row[32], unsigned e, unsigned w) {
-    unsigned bit = e * w;
-    if (w <= 32u) {
-        uint64_t raw = row[bit >> 5] >> (bit & 31u);
-        return w < 32u ? raw & ((1u << w) - 1u) : raw;
+void tandem_fill_f64(tandem_rng *rng, double *out, size_t n) {
+    fill_raw(rng, out, n, 64);
+    for (size_t i = 0; i < n; i++) {
+        uint64_t raw;
+        memcpy(&raw, out + i, 8);
+        out[i] = to_f64(raw);
     }
-    return row[bit >> 5] | ((uint64_t)row[(bit >> 5) + 1u] << 32);
 }
 
-/* Fills take whole rows while the position is row-aligned and at least a row of elements
- * remains, and fall back to single reads at the edges. */
-#define FILL(name, type, w, convert)                                                               \
-    void name(tandem_rng *rng, type *out, size_t n) {                                              \
-        uint64_t p = align_pos(rng->pos, w);                                                       \
-        size_t i = 0;                                                                              \
-        while (i < n) {                                                                            \
-            if ((p & 1023u) == 0 && (n - i) * (w) >= 1024u) {                                      \
-                uint32_t row[32];                                                                  \
-                load_row(rng, p >> 10);                                                            \
-                row_words(rng, row);                                                               \
-                for (unsigned e = 0; e < 1024u / (w); e++, i++) out[i] = convert(row_bits(row, e, w)); \
-                p += 1024u;                                                                        \
-            } else {                                                                               \
-                out[i++] = convert(read_bits(rng, p, w));                                          \
-                p += w;                                                                            \
-            }                                                                                      \
-        }                                                                                          \
-        rng->pos = p;                                                                              \
-    }
-#define AS_U8(x) ((uint8_t)(x))
-#define AS_U16(x) ((uint16_t)(x))
-#define AS_U32(x) ((uint32_t)(x))
-#define AS_U64(x) (x)
-#define AS_F32(x) to_f32((uint32_t)(x))
-#define AS_F16(x) to_f16_bits((uint16_t)(x))
-FILL(tandem_fill_u8, uint8_t, 8u, AS_U8)
-FILL(tandem_fill_u16, uint16_t, 16u, AS_U16)
-FILL(tandem_fill_u32, uint32_t, 32u, AS_U32)
-FILL(tandem_fill_u64, uint64_t, 64u, AS_U64)
-FILL(tandem_fill_f32, float, 32u, AS_F32)
-FILL(tandem_fill_f64, double, 64u, to_f64)
-FILL(tandem_fill_f16_bits, uint16_t, 16u, AS_F16)
-FILL(tandem_fill_char, uint32_t, 64u, to_char)
-#undef FILL
+void tandem_fill_f16_bits(tandem_rng *rng, uint16_t *out, size_t n) {
+    fill_raw(rng, out, n, 16);
+    for (size_t i = 0; i < n; i++) out[i] = to_f16_bits(out[i]);
+}
 
-void tandem_fill_u128(tandem_rng *rng, tandem_u128 *out, size_t n) {
-    uint64_t p = align_pos(rng->pos, 128u);
-    for (size_t i = 0; i < n; i++, p += 128u) out[i] = read_u128(rng, p);
-    rng->pos = p;
+void tandem_fill_char(tandem_rng *rng, uint32_t *out, size_t n) {
+    for (size_t i = 0; i < n; i++) out[i] = tandem_next_char(rng);
 }
 
 void tandem_fill_c32(tandem_rng *rng, float *out, size_t n) { tandem_fill_f32(rng, out, 2u * n); }
 void tandem_fill_c64(tandem_rng *rng, double *out, size_t n) { tandem_fill_f64(rng, out, 2u * n); }
 
-/* Random access works on a copy so the caller's generator and cache stay untouched. */
-static uint64_t at_bits(const tandem_rng *rng, uint64_t i, unsigned w) {
+/* ---- Public: random access and derived generators --------------------------------------- */
+
+/* Element i of the fill that would start here. Works on a copy, so the cache stays put. */
+static uint64_t at(const tandem_rng *rng, uint64_t i, unsigned w) {
     tandem_rng tmp = *rng;
-    uint64_t p = align_pos(rng->pos, w) + i * w;
-    return read_bits(&tmp, p, w);
+    return read(&tmp, align_pos(rng->pos, w) + i * w, w);
 }
 
-uint32_t tandem_at_u32(const tandem_rng *rng, uint64_t i) { return (uint32_t)at_bits(rng, i, 32u); }
-uint64_t tandem_at_u64(const tandem_rng *rng, uint64_t i) { return at_bits(rng, i, 64u); }
-float tandem_at_f32(const tandem_rng *rng, uint64_t i) { return to_f32(tandem_at_u32(rng, i)); }
-double tandem_at_f64(const tandem_rng *rng, uint64_t i) { return to_f64(tandem_at_u64(rng, i)); }
+uint32_t tandem_at_u32(const tandem_rng *rng, uint64_t i) { return (uint32_t)at(rng, i, 32); }
+uint64_t tandem_at_u64(const tandem_rng *rng, uint64_t i) { return at(rng, i, 64); }
+float tandem_at_f32(const tandem_rng *rng, uint64_t i) { return to_f32((uint32_t)at(rng, i, 32)); }
+double tandem_at_f64(const tandem_rng *rng, uint64_t i) { return to_f64(at(rng, i, 64)); }
 
 static tandem_rng child(const tandem_rng *rng, uint64_t counter, uint32_t domain, uint32_t aux,
                         unsigned half) {
