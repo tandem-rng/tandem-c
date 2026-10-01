@@ -16,20 +16,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-latest, cc: gcc}
-          - {os: ubuntu-latest, cc: clang}
-          - {os: ubuntu-latest, cc: clang, sanitize: true}
-          - {os: macos-latest, cc: clang}
+          - {os: ubuntu-latest, cc: gcc, cxx: g++}
+          - {os: ubuntu-latest, cc: clang, cxx: clang++}
+          - {os: ubuntu-latest, cc: clang, cxx: clang++, sanitize: true}
+          - {os: macos-latest, cc: clang, cxx: clang++}
     steps:
       - uses: actions/checkout@v7
       - name: Build and test
         env:
           CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
         run: |
           if [ "${{ matrix.sanitize }}" = "true" ]; then
-            export CFLAGS="-std=c99 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror -fsanitize=address,undefined -fno-sanitize-recover=all"
+            san="-O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all"
+            export CFLAGS="-std=c99 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror $san"
+            export CXXFLAGS="-std=c++17 -Wall -Wextra -Wpedantic -Wshadow -Werror $san"
+            export LDFLAGS="$san"
           else
             export CFLAGS="-std=c99 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror"
+            export CXXFLAGS="-std=c++17 -O2 -Wall -Wextra -Wpedantic -Wshadow -Werror"
           fi
           make test
       - name: Vector header is current

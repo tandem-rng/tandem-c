@@ -5,7 +5,9 @@ noncryptographic pseudorandom number generator designed for GPUs first. The Juli
 is [TandemRNG.jl](https://github.com/tandem-rng/TandemRNG.jl). This implementation produces
 the same stream, bit for bit, for every type it supports.
 
-- C99, no dependencies, two files: `tandem.h` and `tandem.c`.
+- C99, no dependencies, two files: `tandem.h` and `tandem.c`. `tandem.hpp` adds a C++17
+  value type that satisfies `std::uniform_random_bit_generator`, so it drives every
+  `<random>` distribution.
 - A generator is its transport form (128-bit key, 64-bit bit position, chunk length `K`) plus
   a cache of the current 1024-bit row. Copy it by value.
 - Every type in the specification: `bool`, 8 to 128-bit unsigned integers, `float`,
@@ -33,6 +35,20 @@ tandem_fork(&rng, kids, 4);                        /* from the current block, pa
 
 Build with `make`, which produces `libtandem.a`, or compile `tandem.c` into your project.
 
+From C++:
+
+```cpp
+#include "tandem.hpp"
+
+tandem::rng g(42);
+std::normal_distribution<double> gauss;
+double z = gauss(g);                               /* any <random> distribution */
+double u = g.next<double>();                       /* the spec's own draws */
+std::vector<float> xs = g.fill<float>(1 << 20);
+tandem::rng worker = g.split(7);
+std::vector<tandem::rng> kids = g.fork(4);
+```
+
 ## Tests
 
 ```sh
@@ -43,6 +59,7 @@ make test
 generated from the spec repository's `vectors.json` by `tools/gen_vectors.py`, and CI fails
 when it is out of date. `tests/test_stream.c` compares long fills, scalar draws, and random
 access against dumps written by TandemRNG.jl with `tools/dump_streams.jl`.
+`tests/test_cpp.cpp` checks that the C++ wrapper agrees with the C API and runs `<random>`.
 
 ## Speed
 
