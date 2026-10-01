@@ -49,15 +49,16 @@ Apple M4, one thread, `make bench` (clang, `-O2`), minimum of seven runs of 2^24
 
 | | GiB/s | with `TANDEM_NO_SIMD` |
 |---|---|---|
-| `tandem_fill_u32` | 8.6 | 4.0 |
-| `tandem_fill_u64` | 8.5 | 2.4 |
-| `tandem_fill_f32` | 10.0 | 1.6 |
-| `tandem_fill_f64` | 9.4 | 2.2 |
-| `tandem_next_f64` chain | 3.7 | 2.2 |
+| `tandem_fill_u32` | 8.6 | 8.0 |
+| `tandem_fill_u64` | 8.5 | 8.1 |
+| `tandem_fill_f32` | 10.0 | 9.3 |
+| `tandem_fill_f64` | 9.4 | 8.8 |
+| `tandem_next_f64` chain | 3.7 | 2.9 |
 
-The scalar-fallback column predates the whole-row fill path and is shown for the row step
-alone. TandemRNG.jl reaches 14 to 18 GiB/s on the same machine with its hand-shuffled
-`Lane8` core, so this C is a correct and reasonably fast reference, not the speed ceiling.
+clang vectorizes the scalar eight-lane step on its own, so the explicit vector path adds
+little on this compiler. It is there for compilers that do not. TandemRNG.jl reaches 14 to
+18 GiB/s on the same machine with its hand-shuffled `Lane8` core, so this C is a correct and
+reasonably fast reference, not the speed ceiling.
 
 ## License
 
