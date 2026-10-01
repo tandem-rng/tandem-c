@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / ${{ matrix.cc }}${{ matrix.sanitize && ' / sanitizers' || '' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, cc: gcc}
+          - {os: ubuntu-latest, cc: clang}
+          - {os: ubuntu-latest, cc: clang, sanitize: true}
+          - {os: macos-latest, cc: clang}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and test
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          if [ "${{ matrix.sanitize }}" = "true" ]; then
+            export CFLAGS="-std=c99 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror -fsanitize=address,undefined -fno-sanitize-recover=all"
+          else
+            export CFLAGS="-std=c99 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror"
+          fi
+          make test
+      - name: Vector header is current
+        run: |
+          git clone --depth 1 https://github.com/tandem-rng/spec ../tandem-spec
+          make vectors
+          git diff --exit-code tests/vectors.h
