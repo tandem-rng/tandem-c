@@ -3,3 +3,4 @@ libtandem.a
 tests/test_vectors
 tests/test_stream
 *.dSYM/
+tools/bench

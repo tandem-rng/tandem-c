@@ -79,6 +79,18 @@ static uint32_t at_u32(const tandem_rng *r, size_t i) { return tandem_at_u32(r, 
 static uint64_t at_u64(const tandem_rng *r, size_t i) { return tandem_at_u64(r, i); }
 static float at_f32(const tandem_rng *r, size_t i) { return tandem_at_f32(r, i); }
 static double at_f64(const tandem_rng *r, size_t i) { return tandem_at_f64(r, i); }
+static uint16_t at_f16(const tandem_rng *r, size_t i) {
+    tandem_rng t = *r;
+    uint16_t v = 0;
+    for (size_t k = 0; k <= i; k++) v = tandem_next_f16_bits(&t);
+    return v;
+}
+static uint32_t at_char(const tandem_rng *r, size_t i) {
+    tandem_rng t = *r;
+    uint32_t v = 0;
+    for (size_t k = 0; k <= i; k++) v = tandem_next_char(&t);
+    return v;
+}
 static uint8_t at_u8(const tandem_rng *r, size_t i) {
     tandem_rng t = *r;
     uint8_t v = 0;
@@ -94,6 +106,74 @@ int main(int argc, char **argv) {
     CHECK_STREAM("seed42_K32_f64.bin", double, tandem_fill_f64, tandem_next_f64, at_f64);
     CHECK_STREAM("seed42_K32_f32.bin", float, tandem_fill_f32, tandem_next_f32, at_f32);
     CHECK_STREAM("seed42_K32_u8.bin", uint8_t, tandem_fill_u8, tandem_next_u8, at_u8);
+    CHECK_STREAM("seed42_K32_f16bits.bin", uint16_t, tandem_fill_f16_bits, tandem_next_f16_bits,
+                 at_f16);
+    CHECK_STREAM("seed42_K32_char.bin", uint32_t, tandem_fill_char, tandem_next_char, at_char);
+    {
+        size_t len, n, i;
+        tandem_u128 *want = slurp(dir, "seed42_K32_u128.bin", &len), *got;
+        if (want) {
+            tandem_rng a = tandem_seed(42, 0, 32), b = a;
+            n = len / sizeof *want;
+            got = malloc(len);
+            tandem_fill_u128(&a, got, n);
+            for (i = 0; i < n; i++) {
+                tandem_u128 s = tandem_next_u128(&b);
+                if (got[i].lo != want[i].lo || got[i].hi != want[i].hi || s.lo != want[i].lo ||
+                    s.hi != want[i].hi) {
+                    printf("FAIL u128 differs at element %zu\n", i);
+                    failures++;
+                    break;
+                }
+            }
+            free(got);
+            free(want);
+        }
+    }
+    {
+        size_t len, n, i;
+        double *want = slurp(dir, "seed42_K32_c64.bin", &len), *got;
+        if (want) {
+            tandem_rng a = tandem_seed(42, 0, 32), b = a;
+            n = len / (2 * sizeof *want);
+            got = malloc(len);
+            tandem_fill_c64(&a, got, n);
+            for (i = 0; i < n; i++) {
+                double z[2];
+                tandem_next_c64(&b, z);
+                if (got[2 * i] != want[2 * i] || got[2 * i + 1] != want[2 * i + 1] ||
+                    z[0] != want[2 * i] || z[1] != want[2 * i + 1]) {
+                    printf("FAIL c64 differs at element %zu\n", i);
+                    failures++;
+                    break;
+                }
+            }
+            free(got);
+            free(want);
+        }
+    }
+    {
+        size_t len, n, i;
+        float *want = slurp(dir, "seed42_K32_c32.bin", &len), *got;
+        if (want) {
+            tandem_rng a = tandem_seed(42, 0, 32), b = a;
+            n = len / (2 * sizeof *want);
+            got = malloc(len);
+            tandem_fill_c32(&a, got, n);
+            for (i = 0; i < n; i++) {
+                float z[2];
+                tandem_next_c32(&b, z);
+                if (got[2 * i] != want[2 * i] || got[2 * i + 1] != want[2 * i + 1] ||
+                    z[0] != want[2 * i] || z[1] != want[2 * i + 1]) {
+                    printf("FAIL c32 differs at element %zu\n", i);
+                    failures++;
+                    break;
+                }
+            }
+            free(got);
+            free(want);
+        }
+    }
     {
         size_t len, i;
         uint8_t *want = slurp(dir, "seed42_K32_bool.bin", &len);
