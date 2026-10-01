@@ -1,9 +1,9 @@
 # tandem-c
 
 Reference C implementation of [Tandem8x32](https://github.com/tandem-rng/spec), a
-noncryptographic pseudorandom number generator designed for GPUs first. The Julia reference
-is [TandemRNG.jl](https://github.com/tandem-rng/TandemRNG.jl). This implementation produces
-the same stream, bit for bit, for every type it supports.
+noncryptographic pseudorandom number generator built to be fast on CPUs and GPUs alike. The
+Julia reference is [TandemRNG.jl](https://github.com/tandem-rng/TandemRNG.jl). This
+implementation produces the same stream, bit for bit, for every type it supports.
 
 - C99, no dependencies, two files: `tandem.h` and `tandem.c`. `tandem.hpp` adds a C++17
   value type that satisfies `std::uniform_random_bit_generator`, so it drives every

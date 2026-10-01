@@ -1,4 +1,4 @@
-/* Tandem8x32: a GPU-first noncryptographic pseudorandom number generator.
+/* Tandem8x32: a noncryptographic pseudorandom number generator, fast on CPUs and GPUs alike.
  *
  * Reference C implementation of https://github.com/tandem-rng/spec.
  * Copyright 2026 Jessica Cox. Apache License 2.0, see LICENSE.
