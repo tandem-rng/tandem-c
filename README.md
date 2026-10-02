@@ -69,15 +69,38 @@ after a warm-up:
 
 | | GiB/s | with `TANDEM_NO_SIMD` |
 |---|---|---|
-| `tandem_fill_u32` | 17.1 | 12.1 |
-| `tandem_fill_u64` | 17.7 | 12.7 |
-| `tandem_fill_f32` | 13.1 | 10.1 |
-| `tandem_fill_f64` | 13.6 | 10.3 |
-| `tandem_next_f64` chain, ns per draw | 1.52 | 1.9 |
+| `tandem_fill_u32` | 17.8 | 12.0 |
+| `tandem_fill_u64` | 17.7 | 11.8 |
+| `tandem_fill_f32` | 15.7 | 11.1 |
+| `tandem_fill_f64` | 15.2 | 10.9 |
+| `tandem_next_f64` chain, ns per draw | 1.45 | 1.75 |
 
 The row loop keeps the eight lane states in registers and stores each row by a vector
-transpose, which is where the throughput comes from. Float fills pay a second pass for the
-conversion.
+transpose, which is where the throughput comes from. Float fills map the words to floats in
+the same loop, before the store. On AArch64 the fixed-point `ucvtf` does the shift and the
+scale in one instruction.
+
+`make bench` also runs `tools/bench_std.cpp`, the C++ wrapper against the generators of the
+C and C++ standard libraries on the same machine (Apple clang 21, libc++):
+
+| | GiB/s |
+|---|---|
+| `tandem::rng::fill<uint32_t>` | 17.2 |
+| `tandem::rng::fill<uint64_t>` | 17.5 |
+| `tandem::rng::fill<float>` | 15.7 |
+| `tandem::rng::fill<double>` | 15.3 |
+| `tandem::rng::next<double>` chain | 5.1 |
+| `std::uniform_real_distribution<double>` on `tandem::rng` | 5.2 |
+| `rand()`, 31 bits per call into `uint32_t` | 1.0 |
+| `random()`, 31 bits per call into `uint32_t` | 2.7 |
+| `arc4random_buf` | 4.9 |
+| `std::mt19937`, `uint32_t` | 3.0 |
+| `std::mt19937_64`, `uint64_t` | 5.5 |
+| `std::mt19937` with `std::uniform_real_distribution<float>` | 1.6 |
+| `std::mt19937_64` with `std::uniform_real_distribution<double>` | 3.1 |
+| `std::mt19937_64` with `std::generate_canonical<double, 53>` | 5.5 |
+
+The standard generators have no fill interface, so each writes one value per call.
 
 ## License
 

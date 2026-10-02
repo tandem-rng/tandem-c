@@ -31,12 +31,16 @@ test: tests/test_vectors tests/test_stream tests/test_cpp
 tools/bench: tools/bench.c tandem.c tandem.h
 	$(CC) $(CFLAGS) -o $@ tools/bench.c tandem.c
 
-bench: tools/bench
+tools/bench_std: tools/bench_std.cpp tandem.hpp tandem.o
+	$(CXX) $(CXXFLAGS) -o $@ tools/bench_std.cpp tandem.o
+
+bench: tools/bench tools/bench_std
 	./tools/bench
+	./tools/bench_std
 
 # Regenerate the vector header from a checkout of https://github.com/tandem-rng/spec.
 vectors:
 	python3 tools/gen_vectors.py $(SPEC_VECTORS) > tests/vectors.h
 
 clean:
-	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_cpp tools/bench
+	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_cpp tools/bench tools/bench_std

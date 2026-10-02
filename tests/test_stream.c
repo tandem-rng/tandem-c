@@ -195,6 +195,49 @@ int main(int argc, char **argv) {
             free(want);
         }
     }
+    {
+        /* Float fills that start and end inside a row agree with one big fill at every offset,
+         * and with the scalar draws after a byte draw moved the position off alignment. */
+        enum { N = 3000 };
+        static double whole[N], part[N];
+        static float wholef[N], partf[N];
+        static const size_t starts[] = {0, 1, 5, 15, 16, 17, 31, 32, 33, 500, 1024};
+        size_t s, i;
+        uint32_t key[4];
+        tandem_rng r = tandem_seed(7, 0, 0);
+        tandem_key(&r, key);
+        tandem_fill_f64(&r, whole, N);
+        r = tandem_seed(7, 0, 0);
+        tandem_fill_f32(&r, wholef, N);
+        for (s = 0; s < sizeof starts / sizeof *starts; s++) {
+            size_t start = starts[s];
+            r = tandem_from_key(key, 64u * start, 0);
+            tandem_fill_f64(&r, part, N - start);
+            for (i = 0; i < N - start; i++)
+                if (part[i] != whole[start + i]) {
+                    printf("FAIL f64 fill from %zu differs at %zu\n", start, i);
+                    failures++;
+                    break;
+                }
+            r = tandem_from_key(key, 32u * start, 0);
+            tandem_fill_f32(&r, partf, N - start);
+            for (i = 0; i < N - start; i++)
+                if (partf[i] != wholef[start + i]) {
+                    printf("FAIL f32 fill from %zu differs at %zu\n", start, i);
+                    failures++;
+                    break;
+                }
+        }
+        r = tandem_seed(7, 0, 0);
+        (void)tandem_next_u8(&r);
+        tandem_fill_f64(&r, part, 40);
+        for (i = 0; i < 40; i++)
+            if (part[i] != whole[1 + i]) {
+                printf("FAIL f64 fill after a byte draw differs at %zu\n", i);
+                failures++;
+                break;
+            }
+    }
     if (failures) {
         printf("%d failures\n", failures);
         return 1;
