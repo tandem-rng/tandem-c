@@ -65,15 +65,15 @@ access against reference stream dumps in `tests/data`, written by `tools/dump_st
 ## Speed
 
 Apple M4, one thread, `make bench` (clang, `-O2`), minimum of seven runs of 2^24 elements
-after a warm-up:
+after a warm-up, load 2:
 
 | | GiB/s | with `TANDEM_NO_SIMD` |
 |---|---|---|
-| `tandem_fill_u32` | 14.4 | 11.4 |
-| `tandem_fill_u64` | 14.4 | 11.2 |
-| `tandem_fill_f32` | 11.3 | 8.9 |
-| `tandem_fill_f64` | 11.3 | 9.0 |
-| `tandem_next_f64` chain, ns per draw | 1.75 | 2.0 |
+| `tandem_fill_u32` | 17.1 | 12.1 |
+| `tandem_fill_u64` | 17.7 | 12.7 |
+| `tandem_fill_f32` | 13.1 | 10.1 |
+| `tandem_fill_f64` | 13.6 | 10.3 |
+| `tandem_next_f64` chain, ns per draw | 1.52 | 1.9 |
 
 The row loop keeps the eight lane states in registers and stores each row by a vector
 transpose, which is where the throughput comes from. Float fills pay a second pass for the
