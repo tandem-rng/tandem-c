@@ -65,7 +65,7 @@ access against reference stream dumps in `tests/data`, written by `tools/dump_st
 ## Speed
 
 Apple M4, one thread, `make bench` (clang, `-O2`), minimum of seven runs of 2^24 elements
-after a warm-up, load 2:
+after a warm-up:
 
 | | GiB/s | with `TANDEM_NO_SIMD` |
 |---|---|---|
