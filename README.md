@@ -3,9 +3,8 @@
 # tandem-c
 
 Reference C implementation of [Tandem8x32](https://github.com/tandem-rng/spec), a
-noncryptographic pseudorandom number generator built to be fast on CPUs and GPUs alike. The
-Julia reference is [TandemRNG.jl](https://github.com/tandem-rng/TandemRNG.jl). This
-implementation produces the same stream, bit for bit, for every type it supports.
+noncryptographic pseudorandom number generator built to be fast on CPUs and GPUs alike. It
+produces the stream the specification defines, bit for bit, for every type it supports.
 
 - C99, no dependencies, two files: `tandem.h` and `tandem.c`. `tandem.hpp` adds a C++17
   value type that satisfies `std::uniform_random_bit_generator`, so it drives every
@@ -60,7 +59,7 @@ make test
 `tests/test_vectors.c` checks every vector of the specification. `tests/vectors.h` is
 generated from the spec repository's `vectors.json` by `tools/gen_vectors.py`, and CI fails
 when it is out of date. `tests/test_stream.c` compares long fills, scalar draws, and random
-access against dumps written by TandemRNG.jl with `tools/dump_streams.jl`.
+access against reference stream dumps in `tests/data`, written by `tools/dump_streams.jl`.
 `tests/test_cpp.cpp` checks that the C++ wrapper agrees with the C API and runs `<random>`.
 
 ## Speed
@@ -68,17 +67,17 @@ access against dumps written by TandemRNG.jl with `tools/dump_streams.jl`.
 Apple M4, one thread, `make bench` (clang, `-O2`), minimum of seven runs of 2^24 elements
 after a warm-up:
 
-| | GiB/s | with `TANDEM_NO_SIMD` | TandemRNG.jl |
-|---|---|---|---|
-| `tandem_fill_u32` | 14.4 | 11.4 | 18 |
-| `tandem_fill_u64` | 14.4 | 11.2 | |
-| `tandem_fill_f32` | 11.3 | 8.9 | |
-| `tandem_fill_f64` | 11.3 | 9.0 | 14 |
-| `tandem_next_f64` chain, ns per draw | 1.75 | 2.0 | 1.0 |
+| | GiB/s | with `TANDEM_NO_SIMD` |
+|---|---|---|
+| `tandem_fill_u32` | 14.4 | 11.4 |
+| `tandem_fill_u64` | 14.4 | 11.2 |
+| `tandem_fill_f32` | 11.3 | 8.9 |
+| `tandem_fill_f64` | 11.3 | 9.0 |
+| `tandem_next_f64` chain, ns per draw | 1.75 | 2.0 |
 
 The row loop keeps the eight lane states in registers and stores each row by a vector
 transpose, which is where the throughput comes from. Float fills pay a second pass for the
-conversion. The Julia column is the same machine from TandemRNG.jl's README.
+conversion.
 
 ## License
 
