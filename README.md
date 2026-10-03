@@ -69,28 +69,32 @@ after a warm-up:
 
 | | GiB/s | with `TANDEM_NO_SIMD` |
 |---|---|---|
-| `tandem_fill_u32` | 17.8 | 12.0 |
-| `tandem_fill_u64` | 17.7 | 11.8 |
-| `tandem_fill_f32` | 15.7 | 11.1 |
-| `tandem_fill_f64` | 15.2 | 10.9 |
-| `tandem_next_f64` chain, ns per draw | 1.45 | 1.75 |
+| `tandem_fill_u32` | 20.4 | 11.4 |
+| `tandem_fill_u64` | 20.2 | 11.6 |
+| `tandem_fill_f32` | 17.4 | 10.4 |
+| `tandem_fill_f64` | 17.5 | 10.3 |
+| `tandem_next_f64` chain, ns per draw | 1.40 | 1.77 |
 
 The row loop keeps the eight lane states in registers and stores each row by a vector
 transpose, which is where the throughput comes from. Float fills map the words to floats in
 the same loop, before the store. On AArch64 the fixed-point `ucvtf` does the shift and the
-scale in one instruction.
+scale in one instruction. The 32x32 to 64-bit products are NEON `umull` and SSE2 `pmuludq`
+through intrinsics: from the portable spelling, a widened 64-bit vector multiply, GCC emits
+scalar multiplies on AArch64 and three `pmuludq` per product on x86. Clang gives the
+figures above. GCC 16 at `-O2` reaches 14.5 GiB/s for `tandem_fill_u32` on the same machine
+and 16.1 at `-O3`, because it keeps the lane states in memory for part of the row loop.
 
 `make bench` also runs `tools/bench_std.cpp`, the C++ wrapper against the generators of the
 C and C++ standard libraries on the same machine (Apple clang 21, libc++):
 
 | | GiB/s |
 |---|---|
-| `tandem::rng::fill<uint32_t>` | 17.2 |
-| `tandem::rng::fill<uint64_t>` | 17.5 |
-| `tandem::rng::fill<float>` | 15.7 |
-| `tandem::rng::fill<double>` | 15.3 |
-| `tandem::rng::next<double>` chain | 5.1 |
-| `std::uniform_real_distribution<double>` on `tandem::rng` | 5.2 |
+| `tandem::rng::fill<uint32_t>` | 20.5 |
+| `tandem::rng::fill<uint64_t>` | 20.3 |
+| `tandem::rng::fill<float>` | 18.4 |
+| `tandem::rng::fill<double>` | 17.7 |
+| `tandem::rng::next<double>` chain | 5.4 |
+| `std::uniform_real_distribution<double>` on `tandem::rng` | 5.3 |
 | `rand()`, 31 bits per call into `uint32_t` | 1.0 |
 | `random()`, 31 bits per call into `uint32_t` | 2.7 |
 | `arc4random_buf` | 4.9 |
