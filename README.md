@@ -69,10 +69,10 @@ after a warm-up:
 
 | | GiB/s | with `TANDEM_NO_SIMD` |
 |---|---|---|
-| `tandem_fill_u32` | 20.4 | 11.4 |
-| `tandem_fill_u64` | 20.2 | 11.6 |
-| `tandem_fill_f32` | 17.4 | 10.4 |
-| `tandem_fill_f64` | 17.5 | 10.3 |
+| `tandem_fill_u32` | 20.4 | 12.3 |
+| `tandem_fill_u64` | 20.2 | 12.3 |
+| `tandem_fill_f32` | 17.4 | 11.1 |
+| `tandem_fill_f64` | 17.5 | 11.1 |
 | `tandem_next_f64` chain, ns per draw | 1.40 | 1.77 |
 
 The row loop keeps the eight lane states in registers and stores each row by a vector
@@ -82,7 +82,9 @@ scale in one instruction. The 32x32 to 64-bit products are NEON `umull` and SSE2
 through intrinsics: from the portable spelling, a widened 64-bit vector multiply, GCC emits
 scalar multiplies on AArch64 and three `pmuludq` per product on x86. Clang gives the
 figures above. GCC 16 at `-O2` reaches 14.5 GiB/s for `tandem_fill_u32` on the same machine
-and 16.1 at `-O3`, because it keeps the lane states in memory for part of the row loop.
+and 16.1 at `-O3`, because it keeps the lane states in memory for part of the row loop. The
+scalar fallback is one straight-line step per lane in a loop over the eight lanes. Clang
+vectorizes that loop, GCC 16 does not at `-O2` and reaches 5.6 GiB/s.
 
 `make bench` also runs `tools/bench_std.cpp`, the C++ wrapper against the generators of the
 C and C++ standard libraries on the same machine (Apple clang 21, libc++):
