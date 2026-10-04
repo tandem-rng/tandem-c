@@ -1,0 +1,50 @@
+# conda-forge style recipe in the rattler-build v1 format. It is not submitted yet.
+context:
+  version: "0.1.0"
+
+package:
+  name: tandem-c
+  version: ${{ version }}
+
+# No releases exist, so the source is the main branch. At release time replace it with
+#   url: https://github.com/tandem-rng/tandem-c/archive/refs/tags/v${{ version }}.tar.gz
+#   sha256: <sha256 of that tarball>
+source:
+  git: https://github.com/tandem-rng/tandem-c.git
+  branch: main
+
+build:
+  number: 0
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ stdlib('c') }}
+    - make
+
+tests:
+  - package_contents:
+      lib:
+        - libtandem.a
+      include:
+        - tandem.h
+        - tandem.hpp
+      files:
+        - lib/pkgconfig/tandem.pc
+  - script:
+      - pkg-config --exists tandem
+      - printf '#include <tandem.h>\nint main(void){return 0;}\n' > t.c
+      - $CC t.c $(pkg-config --cflags --libs tandem) -o t
+      - ./t
+    requirements:
+      run:
+        - pkg-config
+        - ${{ compiler('c') }}
+
+about:
+  homepage: https://github.com/tandem-rng/tandem-c
+  license: Apache-2.0
+  license_file:
+    - LICENSE
+    - NOTICE
+  summary: Reference C implementation of the Tandem8x32 random number generator

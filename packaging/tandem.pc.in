@@ -1,0 +1,9 @@
+prefix=@PREFIX@
+libdir=@LIBDIR@
+includedir=@INCLUDEDIR@
+
+Name: tandem
+Description: Tandem8x32 random number generator
+Version: @VERSION@
+Libs: -L${libdir} -ltandem -lm
+Cflags: -I${includedir}

@@ -128,6 +128,13 @@ of normals per block from `tandem_split(block)`, and prints a hash of the result
 `pixi run -e mpi check` in that directory builds it with MPICH and checks that 1, 2 and 4 ranks
 and 1, 4 and 14 threads print the hash of a serial run. CI runs the same check.
 
+## Install
+
+`make install PREFIX=<prefix>` installs `libtandem.a`, `tandem.h`, `tandem.hpp` and a `tandem.pc` file for
+`pkg-config`. `DESTDIR` stages the files. The `packaging/` directory holds a Spack recipe
+(`spack/package.py`) and a conda-forge style recipe (`conda/recipe.yaml`). Neither is submitted to
+Spack or conda-forge yet, and both build from the `main` branch.
+
 ## Tests
 
 ```sh

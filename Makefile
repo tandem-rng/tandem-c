@@ -10,8 +10,12 @@ CXXFLAGS ?= -std=c++23 -O2 -Wall -Wextra -Wpedantic -Wshadow
 SPEC_VECTORS ?= ../tandem-spec/vectors.json
 LDLIBS ?= -lm
 CORE_INCLUDE ?= ../tandem-cuda/include
+PREFIX ?= /usr/local
+LIBDIR ?= $(PREFIX)/lib
+INCLUDEDIR ?= $(PREFIX)/include
+VERSION ?= 0.1.0
 
-.PHONY: all test vectors cross bench accuracy clean
+.PHONY: all test vectors cross bench accuracy install clean
 
 all: libtandem.a
 
@@ -73,6 +77,14 @@ cross: tools/gen_cross
 	./tools/gen_cross normal > tests/cross_normal.h
 	cp $(CORE_INCLUDE)/../tests/cross_fill_below.h tests/cuda_fill_below.h
 	cp $(CORE_INCLUDE)/../tests/cross_fill_normal.h tests/cuda_fill_normal.h
+
+# DESTDIR stages the files for packagers. The paths inside tandem.pc ignore it.
+install: libtandem.a
+	install -d $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(INCLUDEDIR)
+	install -m 644 libtandem.a $(DESTDIR)$(LIBDIR)
+	install -m 644 tandem.h tandem.hpp $(DESTDIR)$(INCLUDEDIR)
+	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCLUDEDIR@|$(INCLUDEDIR)|' \
+	    -e 's|@VERSION@|$(VERSION)|' packaging/tandem.pc.in > $(DESTDIR)$(LIBDIR)/pkgconfig/tandem.pc
 
 clean:
 	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_cpp tools/bench tools/bench_std tools/gen_cross tools/normal_accuracy
