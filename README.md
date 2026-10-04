@@ -56,6 +56,11 @@ std::normal_distribution<double> gauss;
 double z = gauss(g);                               /* any <random> distribution */
 double u = g.next<double>();                       /* the spec's own draws */
 std::vector<float> xs = g.fill<float>(1 << 20);
+auto c = g.next<std::complex<double>>();           /* also uint128, char32_t, float16_bits */
+double u3 = g.at<double>(3);                       /* random access, no advance */
+uint32_t die = g.below<uint32_t>(6);               /* Lemire */
+double n = g.normal();                             /* Box-Muller */
+g.set_position(0);
 tandem::rng worker = g.split(7);
 std::vector<tandem::rng> kids = g.fork(4);
 ```
@@ -74,7 +79,9 @@ access against reference stream dumps in `tests/data`, written by `tools/dump_st
 bounded integers and normals are compared, values and stream position, with fixtures that
 `tools/gen_cross.cpp` computes from the shared core of
 [tandem-cuda](https://github.com/tandem-rng/tandem-cuda). `make cross` regenerates them.
-`tests/test_cpp.cpp` checks that the C++ wrapper agrees with the C API and runs `<random>`.
+`tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`,
+`set_position` and the extra draw types, agrees with the C API and runs `<random>`. Compiled
+as C++20 it also checks `std::uniform_random_bit_generator`.
 
 ## Speed
 

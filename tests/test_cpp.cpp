@@ -5,6 +5,10 @@
 
 #include "../tandem.hpp"
 
+#if __cplusplus >= 202002L
+static_assert(std::uniform_random_bit_generator<tandem::rng>);
+#endif
+
 static int failures;
 
 #define CHECK(cond)                                                                                \
@@ -73,6 +77,44 @@ int main() {
         std::uniform_int_distribution<int> die(1, 6);
         int v = die(g);
         CHECK(v >= 1 && v <= 6);
+    }
+
+    {
+        // The remaining draw types, positioning, random access, bounded integers, normals.
+        tandem::rng h(5);
+        tandem_rng d = tandem_seed(5, 0, 0);
+        CHECK(h.next<char32_t>() == tandem_next_char(&d));
+        CHECK(h.next<tandem::float16_bits>().bits == tandem_next_f16_bits(&d));
+        std::complex<float> c32 = h.next<std::complex<float>>();
+        float f2[2];
+        tandem_next_c32(&d, f2);
+        CHECK(c32.real() == f2[0] && c32.imag() == f2[1]);
+        std::complex<double> c64 = h.next<std::complex<double>>();
+        double d2[2];
+        tandem_next_c64(&d, d2);
+        CHECK(c64.real() == d2[0] && c64.imag() == d2[1]);
+#ifdef __SIZEOF_INT128__
+        tandem_u128 w = tandem_next_u128(&d);
+        CHECK(h.next<tandem::uint128>() == ((tandem::uint128{w.hi} << 64) | w.lo));
+#endif
+        CHECK(h.position() == tandem_position(&d));
+
+        CHECK(h.at<std::uint32_t>(3) == tandem_at_u32(&d, 3));
+        CHECK(h.at<std::uint64_t>(3) == tandem_at_u64(&d, 3));
+        CHECK(h.at<float>(3) == tandem_at_f32(&d, 3));
+        CHECK(h.at<double>(3) == tandem_at_f64(&d, 3));
+        CHECK(h.position() == tandem_position(&d));
+
+        CHECK(h.below<std::uint32_t>(1000) == tandem_u32_below(&d, 1000));
+        CHECK(h.below<std::uint64_t>(1ull << 40) == tandem_u64_below(&d, 1ull << 40));
+        CHECK(h.normal() == tandem_normal_f64(&d));
+        CHECK(h.normal<float>() == tandem_normal_f32(&d));
+        CHECK(h.position() == tandem_position(&d));
+
+        CHECK(h.set_position(100) && tandem_set_position(&d, 100));
+        CHECK(h.next<std::uint64_t>() == tandem_next_u64(&d));
+        CHECK(!h.set_position(std::uint64_t{1} << 63));
+        CHECK(h.position() == tandem_position(&d));
     }
 
     CHECK(tandem::rng(7) == tandem::rng(7));

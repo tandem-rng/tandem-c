@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstddef>
+#include <complex>
 #include <cstdint>
 #include <limits>
 #include <type_traits>
@@ -16,6 +17,17 @@
 #include "tandem.h"
 
 namespace tandem {
+
+#ifdef __SIZEOF_INT128__
+/* __extension__ keeps -Wpedantic quiet about the compiler's 128-bit type. */
+__extension__ typedef unsigned __int128 uint128;
+#endif
+
+/* The bit pattern of an IEEE binary16 value, a distinct type because uint16_t is already the
+ * 16-bit integer draw. */
+struct float16_bits {
+    std::uint16_t bits;
+};
 
 class rng {
 public:
@@ -40,6 +52,8 @@ public:
         return k;
     }
     std::uint64_t position() const noexcept { return tandem_position(&s_); }
+    /* False, with the generator unchanged, when pos >= 2^63. */
+    bool set_position(std::uint64_t pos) noexcept { return tandem_set_position(&s_, pos); }
     std::uint32_t chunk_length() const noexcept { return tandem_chunk_length(&s_); }
 
     /* std::uniform_random_bit_generator: 64 bits per call. */
@@ -50,7 +64,8 @@ public:
         s_.pos = ((s_.pos + 63u) & ~std::uint64_t{63}) + 64u * z;
     }
 
-    /* Draw one value of T: bool, the fixed-width unsigned integers, float, or double. */
+    /* Draw one value of T: bool, the fixed-width unsigned integers (uint128 where the compiler
+     * has it), float, double, float16_bits, char32_t, or std::complex of float or double. */
     template <class T> T next() noexcept {
         if constexpr (std::is_same_v<T, bool>) return tandem_next_bool(&s_);
         else if constexpr (std::is_same_v<T, std::uint8_t>) return tandem_next_u8(&s_);
@@ -59,7 +74,48 @@ public:
         else if constexpr (std::is_same_v<T, std::uint64_t>) return tandem_next_u64(&s_);
         else if constexpr (std::is_same_v<T, float>) return tandem_next_f32(&s_);
         else if constexpr (std::is_same_v<T, double>) return tandem_next_f64(&s_);
+#ifdef __SIZEOF_INT128__
+        else if constexpr (std::is_same_v<T, uint128>) {
+            tandem_u128 v = tandem_next_u128(&s_);
+            return (uint128{v.hi} << 64) | v.lo;
+        }
+#endif
+        else if constexpr (std::is_same_v<T, float16_bits>) return {tandem_next_f16_bits(&s_)};
+        else if constexpr (std::is_same_v<T, char32_t>) return static_cast<char32_t>(tandem_next_char(&s_));
+        else if constexpr (std::is_same_v<T, std::complex<float>>) {
+            float c[2];
+            tandem_next_c32(&s_, c);
+            return {c[0], c[1]};
+        } else if constexpr (std::is_same_v<T, std::complex<double>>) {
+            double c[2];
+            tandem_next_c64(&s_, c);
+            return {c[0], c[1]};
+        }
         else static_assert(sizeof(T) == 0, "tandem::rng::next: unsupported type");
+    }
+
+    /* Element i of the fill that would start here, without advancing: uint32_t, uint64_t,
+     * float, or double. */
+    template <class T> T at(std::uint64_t i) const noexcept {
+        if constexpr (std::is_same_v<T, std::uint32_t>) return tandem_at_u32(&s_, i);
+        else if constexpr (std::is_same_v<T, std::uint64_t>) return tandem_at_u64(&s_, i);
+        else if constexpr (std::is_same_v<T, float>) return tandem_at_f32(&s_, i);
+        else if constexpr (std::is_same_v<T, double>) return tandem_at_f64(&s_, i);
+        else static_assert(sizeof(T) == 0, "tandem::rng::at: unsupported type");
+    }
+
+    /* Uniform on [0, n) for uint32_t or uint64_t, by Lemire's method. */
+    template <class T> T below(T n) noexcept {
+        if constexpr (std::is_same_v<T, std::uint32_t>) return tandem_u32_below(&s_, n);
+        else if constexpr (std::is_same_v<T, std::uint64_t>) return tandem_u64_below(&s_, n);
+        else static_assert(sizeof(T) == 0, "tandem::rng::below: unsupported type");
+    }
+
+    /* Standard normal by Box-Muller, float or double: the values of tandem_normal_f64 and f32. */
+    template <class T = double> T normal() noexcept {
+        if constexpr (std::is_same_v<T, double>) return tandem_normal_f64(&s_);
+        else if constexpr (std::is_same_v<T, float>) return tandem_normal_f32(&s_);
+        else static_assert(sizeof(T) == 0, "tandem::rng::normal: unsupported type");
     }
 
     /* Fill n values of T, the same values as n calls of next<T>(). */
