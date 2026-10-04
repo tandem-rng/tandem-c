@@ -84,7 +84,8 @@ int main() {
     }
 
     {
-        // The remaining draw types, positioning, random access, bounded integers, normals.
+        // The remaining draw types, positioning, random access, bounded integers, normals,
+        // exponentials.
         tandem::rng h(5);
         tandem_rng d = tandem_seed(5, 0, 0);
         CHECK(h.next<char32_t>() == tandem_next_char(&d));
@@ -116,6 +117,8 @@ int main() {
         double z2[2];
         tandem_normal2_f64(&d, z2);
         CHECK((h.normal2() == std::array<double, 2>{z2[0], z2[1]}));
+        CHECK(h.exponential() == tandem_exponential_f64(&d));
+        CHECK(h.exponential<float>() == tandem_exponential_f32(&d));
         CHECK(h.position() == tandem_position(&d));
 
         CHECK(h.set_position(100) && tandem_set_position(&d, 100));

@@ -1,4 +1,5 @@
-/* Functions beyond the specification's draws: positioning, bounded integers, normals. */
+/* Functions beyond the specification's draws: positioning, bounded integers, normals,
+ * exponentials. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,6 +7,7 @@
 
 #include "../tandem.h"
 #include "cross_below.h"
+#include "cross_exponential.h"
 #include "cross_fill_below.h"
 #include "cross_normal.h"
 #include "cuda_fill_below.h"
@@ -284,8 +286,132 @@ static void test_empty_fills(void) {
         tandem_fill_u64_below(&g, &u64, 0, 10);
         tandem_fill_normal_f64(&g, &d, 0);
         tandem_fill_normal_f32(&g, &f, 0);
+        tandem_fill_exponential_f64(&g, &d, 0);
+        tandem_fill_exponential_f32(&g, &f, 0);
         CHECK(tandem_position(&g) == pos[i]);
     }
+}
+
+/* Exponentials of tandem-cuda's core.hpp, whose polynomial logarithm is this library's on the
+ * host and the device, so every bit must match. Element i of a fill is scalar draw i. */
+static void test_exponential_cross(void) {
+    size_t c, i;
+    for (c = 0; c < sizeof CROSS_EXPONENTIAL / sizeof CROSS_EXPONENTIAL[0]; c++) {
+        tandem_rng a = tandem_seed(42, 0, 0), b;
+        double got[CROSS_EXPONENTIAL_COUNT];
+        tandem_set_position(&a, CROSS_EXPONENTIAL[c].start);
+        b = a;
+        tandem_fill_exponential_f64(&a, got, CROSS_EXPONENTIAL_COUNT);
+        CHECK(memcmp(got, CROSS_EXPONENTIAL[c].want, sizeof got) == 0);
+        CHECK(tandem_position(&a) == CROSS_EXPONENTIAL[c].end_pos);
+        for (i = 0; i < CROSS_EXPONENTIAL_COUNT; i++) got[i] = tandem_exponential_f64(&b);
+        CHECK(memcmp(got, CROSS_EXPONENTIAL[c].want, sizeof got) == 0);
+        CHECK(tandem_position(&b) == CROSS_EXPONENTIAL[c].end_pos);
+    }
+    for (c = 0; c < sizeof CROSS_EXPONENTIALF / sizeof CROSS_EXPONENTIALF[0]; c++) {
+        tandem_rng a = tandem_seed(42, 0, 0), b;
+        float got[CROSS_EXPONENTIAL_COUNT];
+        tandem_set_position(&a, CROSS_EXPONENTIALF[c].start);
+        b = a;
+        tandem_fill_exponential_f32(&a, got, CROSS_EXPONENTIAL_COUNT);
+        CHECK(memcmp(got, CROSS_EXPONENTIALF[c].want, sizeof got) == 0);
+        CHECK(tandem_position(&a) == CROSS_EXPONENTIALF[c].end_pos);
+        for (i = 0; i < CROSS_EXPONENTIAL_COUNT; i++) got[i] = tandem_exponential_f32(&b);
+        CHECK(memcmp(got, CROSS_EXPONENTIALF[c].want, sizeof got) == 0);
+        CHECK(tandem_position(&b) == CROSS_EXPONENTIALF[c].end_pos);
+    }
+}
+
+/* A fill equals the scalar draws and a fill cut into pieces at any element, across the block
+ * boundaries of the fill and from an unaligned start, with the same end position. */
+static void test_exponential_fills(void) {
+    enum { N = 3000 };
+    static double want[N], got[N];
+    static float want32[N], got32[N];
+    size_t ns[] = {1, 2, 3, 1023, 1024, 1025, N}, cuts[] = {1, 7, 1000, 1024, 2049};
+    size_t k, c, i;
+    for (k = 0; k < sizeof ns / sizeof ns[0]; k++) {
+        size_t n = ns[k];
+        tandem_rng a = tandem_seed(7, 9, 0), b, d;
+        tandem_next_u8(&a);
+        b = d = a;
+        for (i = 0; i < n; i++) want[i] = tandem_exponential_f64(&a);
+        tandem_fill_exponential_f64(&b, got, n);
+        CHECK(memcmp(want, got, n * sizeof *got) == 0);
+        CHECK(tandem_position(&b) == tandem_position(&a));
+        for (c = 0; c < sizeof cuts / sizeof cuts[0]; c++) {
+            size_t cut = cuts[c] < n ? cuts[c] : n;
+            tandem_rng e = d;
+            tandem_fill_exponential_f64(&e, got, cut);
+            tandem_fill_exponential_f64(&e, got + cut, n - cut);
+            CHECK(memcmp(want, got, n * sizeof *got) == 0);
+            CHECK(tandem_position(&e) == tandem_position(&a));
+        }
+
+        a = b = d;
+        for (i = 0; i < n; i++) want32[i] = tandem_exponential_f32(&a);
+        tandem_fill_exponential_f32(&b, got32, n);
+        CHECK(memcmp(want32, got32, n * sizeof *got32) == 0);
+        CHECK(tandem_position(&b) == tandem_position(&a));
+        for (c = 0; c < sizeof cuts / sizeof cuts[0]; c++) {
+            size_t cut = cuts[c] < n ? cuts[c] : n;
+            tandem_rng e = d;
+            tandem_fill_exponential_f32(&e, got32, cut);
+            tandem_fill_exponential_f32(&e, got32 + cut, n - cut);
+            CHECK(memcmp(want32, got32, n * sizeof *got32) == 0);
+            CHECK(tandem_position(&e) == tandem_position(&a));
+        }
+    }
+}
+
+static int cmp_double(const void *a, const void *b) {
+    double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
+/* Exp(1) has raw moments E[x^k] = k! and Var(x^k) = (2k)! - (k!)^2. Each sample moment must
+ * lie within 5 standard errors, and the Kolmogorov-Smirnov statistic sqrt(n) D below 1.95,
+ * the 0.1 % point of the Kolmogorov distribution. */
+static void check_exponential_sample(const char *name, double *x, size_t n) {
+    const double fact[] = {1, 1, 2, 6, 24, 120, 720, 5040, 40320};
+    double m[5] = {0}, d = 0, p = 0;
+    size_t i;
+    int k;
+    for (i = 0; i < n; i++) {
+        double xk = 1;
+        for (k = 1; k <= 4; k++) m[k] += xk *= x[i];
+    }
+    for (k = 1; k <= 4; k++) {
+        double se = sqrt((fact[2 * k] - fact[k] * fact[k]) / (double)n);
+        m[k] /= (double)n;
+        CHECK(fabs(m[k] - fact[k]) < 5 * se);
+    }
+    qsort(x, n, sizeof *x, cmp_double);
+    for (i = 0; i < n; i++) {
+        double f = -expm1(-x[i]), lo = f - (double)i / (double)n, hi = (double)(i + 1) / (double)n - f;
+        d = fmax(d, fmax(lo, hi));
+    }
+    d *= sqrt((double)n);
+    CHECK(d < 1.95);
+    /* The asymptotic p-value, 2 sum (-1)^(k-1) exp(-2 k^2 d^2). */
+    for (k = 1; k < 100; k++) p += (k % 2 ? 2.0 : -2.0) * exp(-2.0 * k * k * d * d);
+    printf("%s: moments %.5f %.5f %.4f %.3f, KS sqrt(n) D %.3f, p %.3f\n", name, m[1], m[2],
+           m[3], m[4], d, p);
+}
+
+static void test_exponential_stats(void) {
+    enum { N = 10000000 };
+    double *x = malloc(N * sizeof *x);
+    float *f = malloc(N * sizeof *f);
+    size_t i;
+    tandem_rng g = tandem_seed(2026, 10, 0);
+    tandem_fill_exponential_f64(&g, x, N);
+    check_exponential_sample("exponential f64", x, N);
+    tandem_fill_exponential_f32(&g, f, N);
+    for (i = 0; i < N; i++) x[i] = f[i];
+    check_exponential_sample("exponential f32", x, N);
+    free(x);
+    free(f);
 }
 
 int main(void) {
@@ -297,6 +423,9 @@ int main(void) {
     test_normal_cross();
     test_normal_fills();
     test_empty_fills();
+    test_exponential_cross();
+    test_exponential_fills();
+    test_exponential_stats();
     test_device_fixtures();
     if (failures) {
         printf("%d failures\n", failures);

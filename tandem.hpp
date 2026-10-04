@@ -152,6 +152,13 @@ public:
         else static_assert(sizeof(T) == 0, "tandem::rng::normal: unsupported type");
     }
 
+    /* Standard exponential -ln(1 - u), float or double: tandem_exponential_f64 and f32. */
+    template <class T = double> T exponential() noexcept {
+        if constexpr (std::is_same_v<T, double>) return tandem_exponential_f64(&s_);
+        else if constexpr (std::is_same_v<T, float>) return tandem_exponential_f32(&s_);
+        else static_assert(sizeof(T) == 0, "tandem::rng::exponential: unsupported type");
+    }
+
     /* Fill n values of T, the same values as n calls of next<T>(). */
     template <class T> void fill(T *out, std::size_t n) noexcept {
         if constexpr (std::is_same_v<T, bool>) tandem_fill_bool(&s_, out, n);

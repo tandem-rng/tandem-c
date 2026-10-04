@@ -34,7 +34,7 @@ tests/test_vectors: tests/test_vectors.c tests/vectors.h tandem.c tandem.h
 tests/test_stream: tests/test_stream.c tandem.c tandem.h
 	$(CC) $(CFLAGS) -o $@ tests/test_stream.c tandem.c $(LDLIBS)
 
-tests/test_api: tests/test_api.c tests/cross_below.h tests/cross_fill_below.h tests/cross_normal.h tests/cuda_fill_below.h tests/cuda_fill_normal.h tandem.c tandem.h
+tests/test_api: tests/test_api.c tests/cross_below.h tests/cross_exponential.h tests/cross_fill_below.h tests/cross_normal.h tests/cuda_fill_below.h tests/cuda_fill_normal.h tandem.c tandem.h
 	$(CC) $(CFLAGS) -o $@ tests/test_api.c tandem.c $(LDLIBS)
 
 tests/test_r123: tests/test_r123.c tandem123.h tandem.c tandem.h
@@ -61,15 +61,19 @@ bench-target: tools/bench_target
 tests/test_normal_bits: tests/test_normal_bits.c tandem.c tandem.h
 	$(CC) $(CFLAGS) -o $@ tests/test_normal_bits.c tandem.c $(LDLIBS)
 
+tests/test_exponential_bits: tests/test_exponential_bits.c tandem.c tandem.h
+	$(CC) $(CFLAGS) -o $@ tests/test_exponential_bits.c tandem.c $(LDLIBS)
+
 tests/test_cpp: tests/test_cpp.cpp tandem.hpp tandem.o
 	$(CXX) $(CXXFLAGS) -o $@ tests/test_cpp.cpp tandem.o $(LDLIBS)
 
-test: tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_cpp
+test: tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_exponential_bits tests/test_cpp
 	./tests/test_vectors
 	./tests/test_stream tests/data
 	./tests/test_api
 	./tests/test_r123 tests/data
 	./tests/test_normal_bits
+	./tests/test_exponential_bits
 	./tests/test_cpp
 
 tools/bench: tools/bench.c tandem.c tandem.h
@@ -100,6 +104,7 @@ cross: tools/gen_cross
 	./tools/gen_cross below > tests/cross_below.h
 	./tools/gen_cross fill_below > tests/cross_fill_below.h
 	./tools/gen_cross normal > tests/cross_normal.h
+	./tools/gen_cross exponential > tests/cross_exponential.h
 	cp $(CORE_INCLUDE)/../tests/cross_fill_below.h tests/cuda_fill_below.h
 	cp $(CORE_INCLUDE)/../tests/cross_fill_normal.h tests/cuda_fill_normal.h
 
@@ -112,4 +117,4 @@ install: libtandem.a
 	    -e 's|@VERSION@|$(VERSION)|' packaging/tandem.pc.in > $(DESTDIR)$(LIBDIR)/pkgconfig/tandem.pc
 
 clean:
-	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_cpp tools/bench tools/bench_std tools/gen_cross tools/normal_accuracy tests/test_target tools/bench_target
+	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_exponential_bits tests/test_cpp tools/bench tools/bench_std tools/gen_cross tools/normal_accuracy tests/test_target tools/bench_target

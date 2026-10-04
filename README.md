@@ -39,11 +39,18 @@ produces the stream the specification defines, bit for bit, for every type it su
   Every multiply-add in that loop is an explicit `fma`, and the loop is built with floating
   point contraction off, so every compiler and target produces the same bits:
   `tests/test_normal_bits.c` checks a hash of 10^7 normals against the value from the M4.
-- On x86-64 with GCC 12+ or clang, `tandem.c` compiles the row loop and the normal loop a
-  second time for AVX2 and FMA and picks that copy at run time. A plain `-O2` build with no
-  `-m` flags so gets 256-bit rows and hardware fused multiply-adds on Haswell, Zen and newer,
-  and still runs on older CPUs, where `fma` is a library call that is correct but about seven
-  times slower. With `-mavx2 -mfma` only the AVX2 copy remains. Define `TANDEM_NO_AVX2` to
+- Exponentials `tandem_exponential_f64` and `_f32` and the fills `tandem_fill_exponential_f64`
+  and `_f32` return `-ln(1 - u)` from one uniform `u` each, as Appendix A of the specification
+  describes: element i of a fill comes from uniform i, so a fill equals the scalar draws and a
+  fill cut anywhere equals the whole fill. They use the logarithm of the normal loop, with no
+  libm call, and tandem-cuda runs the same arithmetic on the device, so exponentials are bit
+  exact across compilers, targets and devices. The maximum error is 1.1e-15 relative for f64
+  and 2.8e-7 for f32, checked over all 2^24 f32 inputs.
+- On x86-64 with GCC 12+ or clang, `tandem.c` compiles the row loop and the normal and
+  exponential loops a second time for AVX2 and FMA and picks that copy at run time. A plain
+  `-O2` build with no `-m` flags so gets 256-bit rows and hardware fused multiply-adds on
+  Haswell, Zen and newer, and still runs on older CPUs, where `fma` is a library call that is
+  correct but about seven times slower. With `-mavx2 -mfma` only the AVX2 copy remains. Define `TANDEM_NO_AVX2` to
   leave it out. Both copies give the same bits.
 - The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
   written with vector extensions and compiles to NEON, SSE2 or, in the AVX2 copy, one 256-bit
@@ -69,6 +76,8 @@ tandem_fill_u64_below(&rng, idx, 100, 1000000000000u);
 double z = tandem_normal_f64(&rng);                /* Box-Muller; link with -lm */
 float zs[1000];
 tandem_fill_normal_f32(&rng, zs, 1000);
+double e = tandem_exponential_f64(&rng);           /* -ln(1 - u), Exp(1) */
+tandem_fill_exponential_f32(&rng, zs, 1000);
 ```
 
 Build with `make`, which uses clang and produces `libtandem.a`, or compile `tandem.c` into
@@ -89,6 +98,7 @@ double u3 = g.at<double>(3);                       /* random access, no advance 
 uint32_t die = g.below<uint32_t>(6);               /* Lemire */
 double n = g.normal();                             /* Box-Muller, cos half */
 auto pair = g.normal2();                           /* both halves of one step */
+float e = g.exponential<float>();                  /* Exp(1) */
 g.set_position(0);
 tandem::rng worker = g.split(7);
 std::vector<tandem::rng> kids = g.fork(4);
@@ -185,13 +195,22 @@ with fixtures that `tools/gen_cross.cpp` computes from the shared core of
 because the host core runs the same explicit-fma loop. The device-derived fill fixtures of
 tandem-cuda are copied to `tests/cuda_fill_*.h`, where device normals match within 1e-12
 relative for f64 and 16 ulps for f32.
+`tests/cross_exponential.h` holds exponentials of the same core from five start positions,
+unaligned ones included, and the fills and scalar draws must match it bit for bit.
 `make cross` regenerates the fixtures.
+`tests/test_api.c` also cuts exponential fills at several elements and compares them with the
+whole fill and the scalar draws, and checks 10^7 f64 and 10^7 f32 exponentials against Exp(1):
+the first four raw moments within five standard errors and a Kolmogorov-Smirnov statistic
+below the 0.1 % point.
+`tests/test_exponential_bits.c` checks the FNV-1a hash `47f8f98297d94ee2` of 10^6 f64 and 10^6
+f32 exponentials from each of five positions. `tools/dump_exponentials.c` writes the same
+bytes, whose SHA-256 is `5c035a4ef1368231d25a9c2f9201be2df3224e28a14549a50625d0db3770ef4e`.
 `tests/test_r123.c` checks `tandem123.h` against the fills and the dumps.
 On x86-64 CI runs the suite three times: plain `-O2`, which takes the AVX2 copy on the runner,
 `-DTANDEM_NO_AVX2` for the base copy, and `-mavx2 -mfma`.
 `tests/test_target.c` checks the OpenMP target fills against the host fills.
 `tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`,
-`set_position` and the extra draw types, agrees with the C API and runs `<random>`. Compiled
+`exponential`, `set_position` and the extra draw types, agrees with the C API and runs `<random>`. Compiled
 as C++20 it also checks `std::uniform_random_bit_generator`.
 
 ## Speed
@@ -209,6 +228,8 @@ the AVX2 copy picked at run time:
 | `tandem_fill_f64` | 17.5 | 11.1 | 7.0 |
 | `tandem_fill_normal_f64` | 5.0 | 4.3 | 2.4 |
 | `tandem_fill_normal_f32` | 5.5 | 4.6 | 3.3 |
+| `tandem_fill_exponential_f64` | 6.1 | 5.1 | 3.4 |
+| `tandem_fill_exponential_f32` | 6.7 | 5.5 | 4.5 |
 | `tandem_next_f64` chain, ns per draw | 1.40 | 1.77 | 4.05 |
 
 On the EPYC the base copy, which `TANDEM_NO_AVX2` selects, reaches 6.2 GiB/s for
@@ -218,9 +239,9 @@ On the EPYC the base copy, which `TANDEM_NO_AVX2` selects, reaches 6.2 GiB/s for
 function attribute, so `sqrt` keeps its errno branch and the normal loop stays scalar, with
 hardware fused multiply-adds.
 
-The normal rows count the bytes written. They run the vectorized Box-Muller loop described
-above after the float fill, so they do not depend on `TANDEM_NO_SIMD` except through the
-uniforms.
+The normal and exponential rows count the bytes written. They run the vectorized loops
+described above after the float fill, so they do not depend on `TANDEM_NO_SIMD` except
+through the uniforms.
 
 The row loop keeps the eight lane states in registers and stores each row by a vector
 transpose, which is where the throughput comes from. Float fills map the words to floats in

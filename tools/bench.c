@@ -1,4 +1,5 @@
-/* Throughput of the sequential fills, the normal fills, and the scalar chain. Build: make bench. */
+/* Throughput of the sequential fills, the normal and exponential fills, and the scalar chain.
+ * Build: make bench. */
 #define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,6 +48,8 @@ int main(void) {
     BENCH("fill_f64", n * 8, tandem_fill_f64(&rng, f64, n));
     BENCH("fill_normal_f64", n * 8, tandem_fill_normal_f64(&rng, f64, n));
     BENCH("fill_normal_f32", n * 4, tandem_fill_normal_f32(&rng, f32, n));
+    BENCH("fill_exponential_f64", n * 8, tandem_fill_exponential_f64(&rng, f64, n));
+    BENCH("fill_exponential_f32", n * 4, tandem_fill_exponential_f32(&rng, f32, n));
     BENCH("chain next_f64", n * 8, {
         double acc = 0;
         for (size_t i = 0; i < n; i++) acc += tandem_next_f64(&rng);
