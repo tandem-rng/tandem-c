@@ -221,6 +221,25 @@ static void test_device_fixtures(void) {
     }
 }
 
+/* An empty bounded or normal fill advances nothing, even from an unaligned position. */
+static void test_empty_fills(void) {
+    uint64_t pos[] = {1, 5, 33, 65, 1001};
+    size_t i;
+    for (i = 0; i < sizeof pos / sizeof pos[0]; i++) {
+        tandem_rng g = tandem_seed(1, 2, 0);
+        uint32_t u32;
+        uint64_t u64;
+        double d;
+        float f;
+        tandem_set_position(&g, pos[i]);
+        tandem_fill_u32_below(&g, &u32, 0, 10);
+        tandem_fill_u64_below(&g, &u64, 0, 10);
+        tandem_fill_normal_f64(&g, &d, 0);
+        tandem_fill_normal_f32(&g, &f, 0);
+        CHECK(tandem_position(&g) == pos[i]);
+    }
+}
+
 int main(void) {
     test_set_position();
     test_below_cross();
@@ -228,6 +247,7 @@ int main(void) {
     test_below_degenerate();
     test_normal_cross();
     test_normal_fills();
+    test_empty_fills();
     test_device_fixtures();
     if (failures) {
         printf("%d failures\n", failures);
