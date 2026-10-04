@@ -1,5 +1,20 @@
 # Design
 
+## Fills
+
+On x86-64 with GCC 12+ or clang, `tandem.c` compiles the row loop, the ziggurat and the
+normal and exponential loops a second time for AVX2 and FMA and picks that copy at run time. A plain
+`-O2` build with no `-m` flags so gets 256-bit rows and hardware fused multiply-adds on
+Haswell, Zen and newer, and still runs on older CPUs, where `fma` is a library call that is
+correct but about seven times slower. With `-mavx2 -mfma` only the AVX2 copy remains.
+Define `TANDEM_NO_AVX2` to leave it out. Both copies give the same bits.
+
+The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
+written with vector extensions and compiles to NEON, SSE2 or, in the AVX2 copy, one 256-bit
+vector per word. Define `TANDEM_NO_SIMD` for the scalar version. After alignment every
+integer fill is one byte stream, so one routine serves all widths and floats convert in
+place.
+
 ## Bounded integers
 
 Bounded integers `tandem_u32_below` and `tandem_u64_below` (Lemire) go beyond the
@@ -51,18 +66,3 @@ fill cut anywhere equals the whole fill. They use the logarithm of the normal lo
 libm call, and tandem-cuda runs the same arithmetic on the device, so exponentials are bit
 exact across compilers, targets and devices. The maximum error is 1.1e-15 relative for f64
 and 2.8e-7 for f32, checked over all 2^24 f32 inputs.
-
-## SIMD
-
-On x86-64 with GCC 12+ or clang, `tandem.c` compiles the row loop, the ziggurat and the
-normal and exponential loops a second time for AVX2 and FMA and picks that copy at run time. A plain
-`-O2` build with no `-m` flags so gets 256-bit rows and hardware fused multiply-adds on
-Haswell, Zen and newer, and still runs on older CPUs, where `fma` is a library call that is
-correct but about seven times slower. With `-mavx2 -mfma` only the AVX2 copy remains.
-Define `TANDEM_NO_AVX2` to leave it out. Both copies give the same bits.
-
-The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
-written with vector extensions and compiles to NEON, SSE2 or, in the AVX2 copy, one 256-bit
-vector per word. Define `TANDEM_NO_SIMD` for the scalar version. After alignment every
-integer fill is one byte stream, so one routine serves all widths and floats convert in
-place.

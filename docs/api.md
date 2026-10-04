@@ -1,6 +1,6 @@
 # API
 
-## C
+## Use
 
 ```c
 #include "tandem.h"
@@ -16,6 +16,8 @@ uint32_t die = tandem_u32_below(&rng, 6);          /* uniform on [0, 6), Lemire'
 double z = tandem_normal_f64(&rng);                /* ziggurat; link with -lm */
 double e = tandem_exponential_f64(&rng);           /* -ln(1 - u), Exp(1) */
 ```
+
+## Reference
 
 - `tandem_rng`: a copyable value, 128-bit key, 64-bit bit position, chunk length `K`. A
   generator is this transport form plus a cache of the current 1024-bit row. Copy it by value.
@@ -76,6 +78,23 @@ generator with that key and `K` at position 0. The specification limits position
 so `ctr.v[1]` stays below 2^24. `tests/test_r123.c` checks this against `tandem_fill_u32`,
 `tandem_block`, and the reference stream dumps.
 
+## OpenMP target offload
+
+`tandem_target.c` provides `tandem_fill_u32_target`, `_u64_`, `_f32_` and `_f64_`, which fill
+device memory from a `#pragma omp target teams distribute parallel for` region, one thread per
+chunk, with the same values and the same final position as the host fills. Declare them by
+defining `TANDEM_OPENMP_TARGET` before `tandem.h`, and compile `tandem_target.c` with the
+offload flags of your compiler:
+
+```sh
+make test-target OMP_FLAGS="-mp=gpu -gpu=cc80" CC=nvc CFLAGS="-std=c11 -O2"        # nvc
+make test-target OMP_FLAGS="-fopenmp -fopenmp-targets=nvptx64-nvidia-cuda --offload-arch=sm_80"
+```
+
+The plain build does not see any of it. The default `OMP_FLAGS` run the target regions on the
+host with host memory. The conda-forge clang 19 of tandem-cuda's pixi environment ships no
+`libomptarget` device runtime, so it cannot build the offload target there. nvc can.
+
 ## Parallel use
 
 Element `i` of a fill is draw `i`, at bit `64 i` for doubles, so a rank or thread that starts
@@ -95,20 +114,3 @@ tandem_rng task = tandem_split(&noise, task_index);      /* by task, not by rank
 of normals per block from `tandem_split(block)`, and prints a hash of the result.
 `pixi run -e mpi check` in that directory builds it with MPICH and checks that 1, 2 and 4 ranks
 and 1, 4 and 14 threads print the hash of a serial run.
-
-## OpenMP target offload
-
-`tandem_target.c` provides `tandem_fill_u32_target`, `_u64_`, `_f32_` and `_f64_`, which fill
-device memory from a `#pragma omp target teams distribute parallel for` region, one thread per
-chunk, with the same values and the same final position as the host fills. Declare them by
-defining `TANDEM_OPENMP_TARGET` before `tandem.h`, and compile `tandem_target.c` with the
-offload flags of your compiler:
-
-```sh
-make test-target OMP_FLAGS="-mp=gpu -gpu=cc80" CC=nvc CFLAGS="-std=c11 -O2"        # nvc
-make test-target OMP_FLAGS="-fopenmp -fopenmp-targets=nvptx64-nvidia-cuda --offload-arch=sm_80"
-```
-
-The plain build does not see any of it. The default `OMP_FLAGS` run the target regions on the
-host with host memory. The conda-forge clang 19 of tandem-cuda's pixi environment ships no
-`libomptarget` device runtime, so it cannot build the offload target there. nvc can.

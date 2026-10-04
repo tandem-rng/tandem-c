@@ -1,10 +1,14 @@
-# tandem-c documentation
+# tandem-c
 
-- [API](api.md): the C and C++ interface, the counter-based header, parallel use and OpenMP
-  target offload.
+Reference C and C++ implementation of Tandem8x32. It produces the stream of the
+[specification](https://github.com/tandem-rng/spec/blob/main/SPEC.md) bit for bit, with SIMD
+fills on CPUs and OpenMP target fills on GPUs.
+
+- [API](api.md): the C and C++ interface, the counter-based header, OpenMP target offload and
+  parallel use.
 - [Design](design.md): how the fills, bounded integers, normals and exponentials work.
-- [Tests](tests.md): what the suite checks and how to regenerate the fixtures.
-- [Speed](speed.md): CPU and offload figures.
+- [Tests](tests.md): what the suite checks, where the fixtures come from, and what CI runs.
+- [Speed](speed.md): CPU and offload figures, and the standard generators.
 
 ## Install
 
@@ -18,8 +22,7 @@ stages the installed files.
 
 The library needs C11 and C++17 and libm, and nothing newer, so projects that vendor it can
 keep their own flags. `make` builds it as C23 and C++23 with clang, the primary compiler. Set
-`CC` and `CXX` for another compiler. A separate CI job compiles with strict
-`-std=c11 -pedantic-errors` and `-std=c++17`.
+`CC` and `CXX` for another compiler.
 
 The `packaging/` directory holds a Spack recipe (`spack/package.py`) and a conda-forge style
 recipe (`conda/recipe.yaml`). Neither is submitted to Spack or conda-forge yet, and both build

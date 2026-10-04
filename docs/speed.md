@@ -1,5 +1,7 @@
 # Speed
 
+`make bench` produces the CPU figures and `make bench-target` the GPU figures.
+
 ## CPU
 
 Apple M4 and AMD EPYC 7702P, one thread, `make bench`, clang `-O2`, minimum of seven runs of
@@ -43,7 +45,14 @@ machine and 16.1 at `-O3`, because it keeps the lane states in memory for part o
 loop. The scalar fallback is one straight-line step per lane in a loop over the eight lanes.
 Clang vectorizes that loop, GCC 16 does not at `-O2` and reaches 5.6 GiB/s.
 
-## C++ and the standard generators
+## GPU
+
+OpenMP target offload on an A100 40 GB PCIe (driver 570, GPU idle before each run) with nvc
+25.3: `make bench-target` writes 2^28 elements into device memory at 480 to 850 GiB/s over ten runs, median about 570,
+the same for all four types, against 1386 GiB/s for the CUDA kernels of tandem-cuda. Build
+with `OMP_FLAGS="-mp=gpu -gpu=cc80" CC=nvc`.
+
+## Other generators
 
 `make bench` also runs `tools/bench_std.cpp`, the C++ wrapper against the generators of the
 C and C++ standard libraries on the M4 (Apple clang 21, libc++), in GiB/s. The standard
@@ -65,10 +74,3 @@ generators have no fill interface, so each writes one value per call.
 | `random()`, 31 bits per call into `uint32_t` | 2.7 |
 | `std::mt19937` with `std::uniform_real_distribution<float>` | 1.6 |
 | `std::mt19937_64` with `std::uniform_real_distribution<double>` | 3.1 |
-
-## OpenMP target offload
-
-On an A100 40 GB PCIe (driver 570, GPU idle before each run) with nvc 25.3, `make bench-target`
-writes 2^28 elements into device memory at 480 to 850 GiB/s over ten runs, median about 570,
-the same for all four types, against 1386 GiB/s for the CUDA kernels of tandem-cuda. Build
-with `OMP_FLAGS="-mp=gpu -gpu=cc80" CC=nvc`.
