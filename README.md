@@ -24,7 +24,7 @@ tandem_rng rng = tandem_seed(42, 0, 0);          /* 128-bit seed as two halves, 
 uint32_t words[1024];
 tandem_fill_u32(&rng, words, 1024);
 tandem_rng worker = tandem_split(&rng, 7);        /* by index, from the key alone */
-double z = tandem_normal_f64(&worker);            /* Box-Muller; link with -lm */
+double z = tandem_normal_f64(&worker);            /* ziggurat; link with -lm */
 ```
 
 See [API](docs/api.md) for the C++ `<random>` engine, MPI and OpenMP offload, and

@@ -13,7 +13,8 @@ make                              # libtandem.a, built with clang
 make install PREFIX=<prefix>      # libtandem.a, tandem.h, tandem.hpp, tandem.pc
 ```
 
-Or compile `tandem.c` into your project. `DESTDIR` stages the installed files.
+Or compile `tandem.c` into your project, with `tandem_normal_tables.h` next to it. `DESTDIR`
+stages the installed files.
 
 The library needs C11 and C++17 and libm, and nothing newer, so projects that vendor it can
 keep their own flags. `make` builds it as C23 and C++23 with clang, the primary compiler. Set

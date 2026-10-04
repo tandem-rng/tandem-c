@@ -2,12 +2,14 @@
 
 ```sh
 make test
+make stats                # the distribution of 10^8 f64 normals, about 15 s
 ```
 
 - The specification vectors in `tests/vectors.h`, generated from the spec's `vectors.json`.
 - Long fills, scalar draws and random access against the stream dumps in `tests/data`.
-- Bounded integers, normals and exponentials against fixtures from the tandem-cuda core,
-  with hashes of 10^7 normals and 10^6 exponentials. `make cross` regenerates them.
+- Bounded integers, f32 normals and exponentials against fixtures from the tandem-cuda core.
+  f64 normals against this library's published fixture and a Python implementation of the
+  spec. Hashes of normals and exponentials. `make cross` regenerates the fixtures.
 - `tandem123.h` against the fills, and the C++ wrapper against the C API.
 - `make test-target` checks the OpenMP target fills against the host fills.
 
@@ -16,14 +18,32 @@ generated from the spec repository's `vectors.json` by `tools/gen_vectors.py`.
 `tests/test_stream.c` compares long fills, scalar draws, and random access against reference
 stream dumps in `tests/data`, written by `tools/dump_streams.jl`. `tests/test_api.c` checks the
 functions that are not part of the specification's draws. The bounded integers (scalar and
-fill) and normals are compared, values and stream position, with fixtures that
+fill) and f32 normals are compared, values and stream position, with fixtures that
 `tools/gen_cross.cpp` computes from the shared core of
-[tandem-cuda](https://github.com/tandem-rng/tandem-cuda). The normals match bit for bit,
+[tandem-cuda](https://github.com/tandem-rng/tandem-cuda). The f32 normals match bit for bit,
 because the host core runs the same explicit-fma loop. The device-derived fill fixtures of
-tandem-cuda are copied to `tests/cuda_fill_*.h`, where device normals match within 1e-12
-relative for f64 and 16 ulps for f32. `tests/cross_exponential.h` holds exponentials of the
-same core from five start positions, unaligned ones included, and the fills and scalar draws
-must match it bit for bit. `make cross` regenerates the fixtures.
+tandem-cuda are copied to `tests/cuda_fill_*.h`, where device f32 normals match within 16
+ulps. Their f64 normal rows are Box-Muller until tandem-cuda moves to the ziggurat, and are
+not checked. `tests/cross_exponential.h` holds exponentials of the same core from five start
+positions, unaligned ones included, and the fills and scalar draws must match it bit for bit.
+`make cross` regenerates the fixtures.
+
+This library is the reference of the f64 normals. `tools/gen_cross.cpp` writes their rows of
+`tests/cross_normal.h` from it: fills of 64 elements from the key of seed 42 at bits 0, 1 and
+12345, and at three more unaligned starts that put a wedge accept, a wedge reject and a tail
+draw at element 20. Ports check against this file, whose SHA-256 is
+`3cd7c8f9178711255718288eb712eaccb33a1726d2a185f412f13590398ad3ac`. `tests/test_api.c` also
+checks that an f64 fill equals the scalar draws and that fills cut at odd elements and at a
+missed element equal the whole fill, over 40000 elements, and that an empty fill only aligns
+the position. `tests/test_normal_bits.c` checks the FNV-1a hash `a61cfa844c85f7c1` of 10^6
+f64 normals from each of five positions. `tools/dump_normals.c` writes the same bytes, whose
+SHA-256 is `700ec4d2f4d6b82aaa56c6eff18a4e5919585fdbd093988773383d580ea610d1`. It also checks
+2 x 10^5 f64 normals from two positions against a Python implementation written from the text
+of Appendix A, and the FNV-1a hash `aa1ea656ce73a4fb` of the f32 normals from the five
+positions. `tests/test_normal_stats.c` checks 10^8 f64 normals against the standard normal:
+raw moments 1 to 6 and the counts beyond 3, 3.5, 4, 4.5 and 5 within four standard errors,
+and Kolmogorov-Smirnov and Anderson-Darling p-values above 0.001. CI runs it once, and checks
+that `make tables` reproduces `tandem_normal_tables.h` from the spec.
 
 `tests/test_api.c` also cuts exponential fills at several elements and compares them with the
 whole fill and the scalar draws, and checks 10^7 f64 and 10^7 f32 exponentials against Exp(1):
@@ -33,7 +53,7 @@ below the 0.1 % point. `tests/test_exponential_bits.c` checks the FNV-1a hash
 `tools/dump_exponentials.c` writes the same bytes, whose SHA-256 is
 `5c035a4ef1368231d25a9c2f9201be2df3224e28a14549a50625d0db3770ef4e`.
 
-`tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`,
+`tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`, `normal2`,
 `exponential`, `set_position` and the extra draw types, agrees with the C API and runs
 `<random>`. Compiled as C++20 it also checks `std::uniform_random_bit_generator`.
 

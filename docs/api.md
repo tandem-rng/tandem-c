@@ -13,7 +13,7 @@ tandem_rng worker = tandem_split(&rng, 7);        /* by index, from the key alon
 tandem_rng kids[4];
 tandem_fork(&rng, kids, 4);                        /* from the current block, parent moves on */
 uint32_t die = tandem_u32_below(&rng, 6);          /* uniform on [0, 6), Lemire's method */
-double z = tandem_normal_f64(&rng);                /* Box-Muller; link with -lm */
+double z = tandem_normal_f64(&rng);                /* ziggurat; link with -lm */
 double e = tandem_exponential_f64(&rng);           /* -ln(1 - u), Exp(1) */
 ```
 
@@ -25,10 +25,14 @@ double e = tandem_exponential_f64(&rng);           /* -ln(1 - u), Exp(1) */
 - `tandem_set_position`, `tandem_split`, `tandem_fork`, `tandem_sub`, `tandem_from_key`.
 - Bounded integers `tandem_u32_below`, `tandem_u64_below` and `tandem_fill_u32_below`,
   `tandem_fill_u64_below`. A fill cut anywhere equals the whole fill.
-- Normals `tandem_normal_f64`, `tandem_normal_f32`, `tandem_normal2_*`, `tandem_fill_normal_*`.
-  Bit exact with tandem-cuda on host and device, and with every port that copies the polynomials.
+- Normals `tandem_normal_f64`, `tandem_normal_f32`, `tandem_normal2_f32`,
+  `tandem_fill_normal_*`. f64 normals are the ziggurat of Appendix A, one draw per element, bit
+  exact on every compiler and target and with every port that copies its tables and logarithm.
+  An f64 fill cut anywhere equals the whole fill. f32 normals are Box-Muller pairs, bit exact
+  with tandem-cuda on the host.
 - Exponentials `tandem_exponential_*` and `tandem_fill_exponential_*`, bit exact on every
   compiler, target and device.
+- `tandem.c` includes `tandem_normal_tables.h`. Copy both when you vendor the library.
 - x86-64 builds pick an AVX2 and FMA copy of the fill loops at run time. Define
   `TANDEM_NO_AVX2` or `TANDEM_NO_SIMD` to turn off the AVX2 copy or all SIMD. The bits stay
   the same.

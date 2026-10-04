@@ -11,22 +11,26 @@ Apple M4 and AMD EPYC 7702P, one thread, `make bench`, clang `-O2`, minimum of s
 | `tandem_fill_u64` | 20.2 | 12.3 | 8.7 |
 | `tandem_fill_f32` | 17.4 | 11.1 | 7.9 |
 | `tandem_fill_f64` | 17.5 | 11.1 | 7.0 |
-| `tandem_fill_normal_f64` | 5.0 | 4.3 | 2.4 |
+| `tandem_fill_normal_f64` | 7.7 | 5.9 | 3.6 |
 | `tandem_fill_normal_f32` | 5.5 | 4.6 | 3.3 |
 | `tandem_fill_exponential_f64` | 6.1 | 5.1 | 3.4 |
 | `tandem_fill_exponential_f32` | 6.7 | 5.5 | 4.5 |
 | `tandem_next_f64` chain, ns per draw | 1.40 | 1.77 | 4.05 |
 
 On the EPYC the base copy, which `TANDEM_NO_AVX2` selects, reaches 6.2 GiB/s for
-`tandem_fill_u32` and 0.24 for `tandem_fill_normal_f64`, where `fma` is a library call. The
-EPYC build is clang 20 at plain `-O2` with no `-m` flags, so it runs the AVX2 copy picked at
-run time. GCC 12 at `-O2` reaches 9.1 GiB/s for `tandem_fill_u32` but only 0.83 for
-`tandem_fill_normal_f64`. GCC honours `-fno-math-errno` only on the command line, not as a
-function attribute, so `sqrt` keeps its errno branch and the normal loop stays scalar, with
-hardware fused multiply-adds.
+`tandem_fill_u32` and 2.9 for `tandem_fill_normal_f64`, whose library `fma` calls stay in the
+rare slow path. The EPYC build is clang 20 at plain `-O2` with no `-m` flags, so it runs the
+AVX2 copy picked at run time. With `-mavx2 -mfma` the f64 normal fill runs at the same speed.
+GCC 12 at `-O2` reaches 9.1 GiB/s for `tandem_fill_u32` and 3.2 for `tandem_fill_normal_f64`,
+but only 0.55 for `tandem_fill_normal_f32`. GCC honours `-fno-math-errno` only on the command
+line, not as a function attribute, so `sqrt` keeps its errno branch and the Box-Muller loop
+stays scalar.
 
-The normal and exponential rows count the bytes written. They run the vectorized loops
-after the float fill, so they do not depend on `TANDEM_NO_SIMD` except through the uniforms.
+The normal and exponential rows count the bytes written. The f32 normal and the exponential
+fills run their vectorized loops after the float fill, so they depend on `TANDEM_NO_SIMD`
+only through the uniforms. The f64 normal fill runs a table pass after the u64 fill, which
+`TANDEM_NO_SIMD` slows. Before the ziggurat, the Box-Muller f64 normal fill ran at 5.0 GiB/s
+on the M4 and 2.4 on the EPYC.
 
 The row loop keeps the eight lane states in registers and stores each row by a vector
 transpose, which is where the throughput comes from. Float fills map the words to floats in
