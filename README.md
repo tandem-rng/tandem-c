@@ -17,7 +17,7 @@ produces the stream the specification defines, bit for bit, for every type it su
   the current block, sub by purpose. Bounded integers `tandem_u32_below` and
   `tandem_u64_below` (Lemire) and normals `tandem_normal_f64` and `tandem_normal_f32`
   (Box-Muller, which needs `-lm`) go beyond the specification and return the same values as
-  tandem-cuda. The f32 normal is the f64 normal rounded.
+  tandem-cuda. The f32 normal draws two f32 uniforms and rounds the double result.
 - The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
   written with vector extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD`
   for the scalar version. After alignment every integer fill is one byte stream, so one

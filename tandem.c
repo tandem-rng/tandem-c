@@ -599,10 +599,14 @@ double tandem_normal_f64(tandem_rng *rng) {
     return box_muller(a, tandem_next_f64(rng));
 }
 
-float tandem_normal_f32(tandem_rng *rng) { return (float)tandem_normal_f64(rng); }
+/* Two f32 uniforms, widened to double, through the same Box-Muller as the f64 normal. */
+float tandem_normal_f32(tandem_rng *rng) {
+    double a = (double)tandem_next_f32(rng);
+    return (float)box_muller(a, (double)tandem_next_f32(rng));
+}
 
-/* The uniforms of a fill come from tandem_fill_f64 in blocks, which is the same stream as
- * scalar draws because every draw is 64 bits and aligned. */
+/* The uniforms of a fill come from tandem_fill_f64 or tandem_fill_f32 in blocks, which is the
+ * same stream as scalar draws because every draw is aligned to its width. */
 #define NORMAL_BLOCK 256u
 
 void tandem_fill_normal_f64(tandem_rng *rng, double *out, size_t n) {
@@ -617,11 +621,12 @@ void tandem_fill_normal_f64(tandem_rng *rng, double *out, size_t n) {
 }
 
 void tandem_fill_normal_f32(tandem_rng *rng, float *out, size_t n) {
-    double z[NORMAL_BLOCK];
+    float u[2u * NORMAL_BLOCK];
     while (n) {
         size_t m = n < NORMAL_BLOCK ? n : NORMAL_BLOCK;
-        tandem_fill_normal_f64(rng, z, m);
-        for (size_t i = 0; i < m; i++) out[i] = (float)z[i];
+        tandem_fill_f32(rng, u, 2u * m);
+        for (size_t i = 0; i < m; i++)
+            out[i] = (float)box_muller((double)u[2u * i], (double)u[2u * i + 1u]);
         out += m;
         n -= m;
     }

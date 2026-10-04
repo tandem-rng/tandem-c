@@ -96,15 +96,24 @@ static void test_normal_cross(void) {
         CHECK(fabs(z - CROSS_NORMAL[i]) <= 1e-12 * fabs(CROSS_NORMAL[i]));
     }
     CHECK(tandem_position(&g) == CROSS_NORMAL_END_POS);
+
+    /* core.hpp computes the f32 normal in float, this library in double, so they agree to a few
+     * float ulps, and in absolute terms near the zeros of cos. The position is exact. */
+    g = tandem_seed(42, 0, 0);
+    tandem_next_bool(&g);
+    for (i = 0; i < CROSS_NORMAL_COUNT; i++) {
+        float z = tandem_normal_f32(&g);
+        CHECK(fabsf(z - CROSS_NORMALF[i]) <= 1e-5f * (1.0f + fabsf(CROSS_NORMALF[i])));
+    }
+    CHECK(tandem_position(&g) == CROSS_NORMALF_END_POS);
 }
 
-/* Fills equal scalar draws, across block boundaries and from an unaligned start; the f32
- * normal is the f64 normal rounded. */
+/* Fills equal scalar draws, across block boundaries and from an unaligned start. */
 static void test_normal_fills(void) {
     enum { N = 1000 };
     tandem_rng a = tandem_seed(7, 9, 0), b, c;
     double *want = malloc(N * sizeof *want), *got = malloc(N * sizeof *got);
-    float *got32 = malloc(N * sizeof *got32);
+    float *want32 = malloc(N * sizeof *want32), *got32 = malloc(N * sizeof *got32);
     size_t i;
 
     tandem_next_u8(&a);
@@ -113,15 +122,12 @@ static void test_normal_fills(void) {
     tandem_fill_normal_f64(&b, got, N);
     CHECK(memcmp(want, got, N * sizeof *got) == 0);
     CHECK(tandem_position(&b) == tandem_position(&a));
+    a = c;
+    for (i = 0; i < N; i++) want32[i] = tandem_normal_f32(&a);
     tandem_fill_normal_f32(&c, got32, N);
-    for (i = 0; i < N; i++) CHECK(got32[i] == (float)want[i]);
+    CHECK(memcmp(want32, got32, N * sizeof *got32) == 0);
     CHECK(tandem_position(&c) == tandem_position(&a));
-    {
-        tandem_rng d = tandem_seed(7, 9, 0), e = d;
-        tandem_next_u8(&d), tandem_next_u8(&e);
-        CHECK(tandem_normal_f32(&d) == (float)tandem_normal_f64(&e));
-    }
-    free(want), free(got), free(got32);
+    free(want), free(got), free(want32), free(got32);
 }
 
 int main(void) {

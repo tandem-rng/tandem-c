@@ -73,8 +73,8 @@ uint64_t tandem_u64_below(tandem_rng *rng, uint64_t n);
 
 /* Standard normal by Box-Muller from two tandem_next_f64 draws, u mapped to (0, 1]:
  * sqrt(-2 ln u) cos(2 pi v). It matches Rng::normal of tandem-cuda and is not part of the
- * specification. The f32 version rounds the same double, so it also consumes 128 bits. Link
- * with -lm. */
+ * specification. The f32 version does the same from two tandem_next_f32 draws, 64 bits, in
+ * double arithmetic and rounds the result to float. Link with -lm. */
 double tandem_normal_f64(tandem_rng *rng);
 float tandem_normal_f32(tandem_rng *rng);
 

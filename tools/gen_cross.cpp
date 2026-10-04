@@ -54,7 +54,14 @@ static void normal() {
     std::printf("static const double CROSS_NORMAL[CROSS_NORMAL_COUNT] = {");
     for (int i = 0; i < COUNT; i++)
         std::printf("%s%.17g", i ? (i % 4 ? ", " : ",\n    ") : "\n    ", g.normal());
-    std::printf("\n};\nstatic const uint64_t CROSS_NORMAL_END_POS = %" PRIu64 "u;\n", g.position());
+    std::printf("\n};\nstatic const uint64_t CROSS_NORMAL_END_POS = %" PRIu64 "u;\n\n", g.position());
+
+    tandem::Rng f(42);
+    f.bit();
+    std::printf("static const float CROSS_NORMALF[CROSS_NORMAL_COUNT] = {");
+    for (int i = 0; i < COUNT; i++)
+        std::printf("%s%.9gf", i ? (i % 4 ? ", " : ",\n    ") : "\n    ", f.normalf());
+    std::printf("\n};\nstatic const uint64_t CROSS_NORMALF_END_POS = %" PRIu64 "u;\n", f.position());
 }
 
 int main(int argc, char **argv) {
