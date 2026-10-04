@@ -5,7 +5,14 @@ endif
 ifeq ($(origin CXX),default)
 CXX = clang++
 endif
-CFLAGS ?= -std=c23 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+# The normal fills use explicit fused multiply-adds, which x86 needs -mfma to compile to one
+# instruction (Haswell or newer). -ffp-contract=off keeps every other expression unfused, so
+# all compilers produce the same normals.
+ARCH := $(shell uname -m)
+ifneq ($(filter x86_64 amd64,$(ARCH)),)
+FMAFLAGS = -mfma
+endif
+CFLAGS ?= -std=c23 -O2 -ffp-contract=off $(FMAFLAGS) -Wall -Wextra -Wpedantic -Wconversion -Wshadow
 CXXFLAGS ?= -std=c++23 -O2 -Wall -Wextra -Wpedantic -Wshadow
 SPEC_VECTORS ?= ../tandem-spec/vectors.json
 LDLIBS ?= -lm
@@ -55,14 +62,18 @@ test-target: tests/test_target
 bench-target: tools/bench_target
 	./tools/bench_target
 
+tests/test_normal_bits: tests/test_normal_bits.c tandem.c tandem.h
+	$(CC) $(CFLAGS) -o $@ tests/test_normal_bits.c tandem.c $(LDLIBS)
+
 tests/test_cpp: tests/test_cpp.cpp tandem.hpp tandem.o
 	$(CXX) $(CXXFLAGS) -o $@ tests/test_cpp.cpp tandem.o $(LDLIBS)
 
-test: tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_cpp
+test: tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_cpp
 	./tests/test_vectors
 	./tests/test_stream tests/data
 	./tests/test_api
 	./tests/test_r123 tests/data
+	./tests/test_normal_bits
 	./tests/test_cpp
 
 tools/bench: tools/bench.c tandem.c tandem.h
@@ -105,4 +116,4 @@ install: libtandem.a
 	    -e 's|@VERSION@|$(VERSION)|' packaging/tandem.pc.in > $(DESTDIR)$(LIBDIR)/pkgconfig/tandem.pc
 
 clean:
-	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_cpp tools/bench tools/bench_std tools/gen_cross tools/normal_accuracy tests/test_target tools/bench_target
+	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_cpp tools/bench tools/bench_std tools/gen_cross tools/normal_accuracy tests/test_target tools/bench_target

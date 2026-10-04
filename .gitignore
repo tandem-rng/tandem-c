@@ -12,3 +12,5 @@ tools/normal_accuracy
 tests/test_r123
 tests/test_target
 tools/bench_target
+tests/test_normal_bits
+tools/dump_normals

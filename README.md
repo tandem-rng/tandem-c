@@ -36,6 +36,11 @@ produces the stream the specification defines, bit for bit, for every type it su
   quarter-turn reduction, which the compiler vectorizes. `make accuracy` compares the fills with
   libm on 5e7 pairs. The f64 normals agree to 1e-15 relative and the f32 normals to 3.3 ulps.
   `make bench` reports the normal fills too.
+  Every multiply-add in that loop is an explicit `fma`, and the loop is built with floating
+  point contraction off, so every compiler and target produces the same bits:
+  `tests/test_normal_bits.c` checks a hash of 10^7 normals against the value from the M4. On
+  x86 build with `-mfma` (Haswell or newer; the Makefile adds it), or `fma` is a library call
+  that is correct but about seven times slower.
 - The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
   written with vector extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD`
   for the scalar version. After alignment every integer fill is one byte stream, so one

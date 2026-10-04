@@ -55,12 +55,13 @@ jobs:
         if: matrix.mode != 'c11'
         run: |
           $CC --version | head -1
+          fma=""; [ "$(uname -m)" = x86_64 ] && fma="-mfma"
           if [ "${{ matrix.mode }}" = "sanitizers" ]; then
             san="-O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all"
-            export CFLAGS="-std=c23 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror $san"
+            export CFLAGS="-std=c23 -ffp-contract=off $fma -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror $san"
             export CXXFLAGS="-std=c++23 -Wall -Wextra -Wpedantic -Wshadow -Werror $san"
           else
-            export CFLAGS="-std=c23 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror"
+            export CFLAGS="-std=c23 -O2 -ffp-contract=off $fma -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror"
             export CXXFLAGS="-std=c++23 -O2 -Wall -Wextra -Wpedantic -Wshadow -Werror"
           fi
           make test
