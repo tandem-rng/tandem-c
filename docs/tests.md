@@ -22,8 +22,8 @@ compares long fills, scalar draws, and random access against reference stream du
 draws. The bounded integers (scalar and fill) and f32 normals are compared, values and stream
 position, with fixtures from the shared core of tandem-cuda. The f32 normals match bit for bit,
 because the host core runs the same explicit-fma loop. Device f32 normals from the
-device-derived fill fixtures of tandem-cuda match within 16 ulps. Their f64 normal rows are
-Box-Muller until tandem-cuda moves to the ziggurat, and are not checked. Exponential fills and
+device-derived fill fixtures of tandem-cuda match within 16 ulps, and their f64 ziggurat rows
+match bit for bit. Exponential fills and
 scalar draws must match the same core bit for bit from five start positions, unaligned ones
 included.
 

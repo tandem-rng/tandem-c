@@ -240,9 +240,8 @@ static void test_normal_fills_f32(void) {
 }
 
 /* Fixtures that tandem-cuda derives on the device: fills from the key of seed 42 at several
- * start positions. Bounded values are exact and f32 normals match to 16 ulps plus an absolute
- * floor. The f64 normal rows are tandem-cuda's Box-Muller until it moves to the ziggurat, so
- * they are not checked. */
+ * start positions. Bounded values and f64 normals are exact, f32 normals match to 16 ulps plus
+ * an absolute floor. */
 static void test_device_fixtures(void) {
     size_t c, i;
     for (c = 0; c < sizeof CROSS_BELOW32 / sizeof CROSS_BELOW32[0]; c++) {
@@ -269,6 +268,12 @@ static void test_device_fixtures(void) {
         uint64_t out[64];
         tandem_fill_u64_below(&g, out, 64, CROSS_BELOW64_AT[c].range);
         CHECK(memcmp(out, CROSS_BELOW64_AT[c].out, sizeof out) == 0);
+    }
+    for (c = 0; c < sizeof CROSS_NORMAL64 / sizeof CROSS_NORMAL64[0]; c++) {
+        tandem_rng g = tandem_from_key(CROSS_FILL_KEY, CROSS_NORMAL64[c].pos, 0);
+        double out[64];
+        tandem_fill_normal_f64(&g, out, CROSS_NORMAL64[c].n);
+        CHECK(memcmp(out, CROSS_NORMAL64[c].out, CROSS_NORMAL64[c].n * sizeof *out) == 0);
     }
     for (c = 0; c < sizeof CROSS_NORMAL32 / sizeof CROSS_NORMAL32[0]; c++) {
         tandem_rng g = tandem_from_key(CROSS_FILL_KEY, CROSS_NORMAL32[c].pos, 0);
