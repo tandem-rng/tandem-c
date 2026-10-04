@@ -14,7 +14,8 @@ produces the stream the specification defines, bit for bit, for every type it su
 - Every type in the specification: `bool`, 8 to 128-bit unsigned integers, `float`,
   `double`, binary16 as bit patterns, Unicode scalars, and complex pairs. Signed integers are
   the unsigned draws reinterpreted. Random access without advancing. Split by index, fork at
-  the current block, sub by purpose.
+  the current block, sub by purpose. Bounded integers `tandem_u32_below` and
+  `tandem_u64_below` (Lemire, the same values as tandem-cuda) go beyond the specification.
 - The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
   written with vector extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD`
   for the scalar version. After alignment every integer fill is one byte stream, so one
@@ -33,6 +34,9 @@ tandem_rng worker = tandem_split(&rng, 7);        /* by index, from the key alon
 tandem_rng kids[4];
 tandem_fork(&rng, kids, 4);                        /* from the current block, parent moves on */
 tandem_set_position(&rng, 0);                      /* rewind; false if the position is >= 2^63 */
+uint32_t die = tandem_u32_below(&rng, 6);          /* uniform on [0, 6), Lemire's method */
+uint64_t idx[100];
+tandem_fill_u64_below(&rng, idx, 100, 1000000000000u);
 ```
 
 Build with `make`, which produces `libtandem.a`, or compile `tandem.c` into your project.
@@ -61,7 +65,10 @@ make test
 generated from the spec repository's `vectors.json` by `tools/gen_vectors.py`, and CI fails
 when it is out of date. `tests/test_stream.c` compares long fills, scalar draws, and random
 access against reference stream dumps in `tests/data`, written by `tools/dump_streams.jl`.
-`tests/test_api.c` checks the functions that are not part of the specification's draws.
+`tests/test_api.c` checks the functions that are not part of the specification's draws. The
+bounded integers are compared, values and stream position, with fixtures that
+`tools/gen_cross.cpp` computes from the shared core of
+[tandem-cuda](https://github.com/tandem-rng/tandem-cuda). `make cross` regenerates them.
 `tests/test_cpp.cpp` checks that the C++ wrapper agrees with the C API and runs `<random>`.
 
 ## Speed

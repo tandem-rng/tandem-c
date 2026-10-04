@@ -546,6 +546,47 @@ void tandem_fill_char(tandem_rng *rng, uint32_t *out, size_t n) {
 void tandem_fill_c32(tandem_rng *rng, float *out, size_t n) { tandem_fill_f32(rng, out, 2u * n); }
 void tandem_fill_c64(tandem_rng *rng, double *out, size_t n) { tandem_fill_f64(rng, out, 2u * n); }
 
+/* ---- Public: bounded integers ------------------------------------------------------------ */
+
+/* High word of a 64 x 64-bit product from 32-bit halves, since C99 has no 128-bit type. */
+static uint64_t mulhi64(uint64_t a, uint64_t b) {
+    uint64_t a0 = a & 0xffffffffu, a1 = a >> 32, b0 = b & 0xffffffffu, b1 = b >> 32;
+    uint64_t mid = a1 * b0 + ((a0 * b0) >> 32);
+    uint64_t mid2 = a0 * b1 + (mid & 0xffffffffu);
+    return a1 * b1 + (mid >> 32) + (mid2 >> 32);
+}
+
+/* The rejection threshold (2^w mod n) is computed only when the low word is below n, which
+ * keeps the division off the common path. */
+uint32_t tandem_u32_below(tandem_rng *rng, uint32_t n) {
+    uint64_t m = (uint64_t)tandem_next_u32(rng) * n;
+    if ((uint32_t)m < n) {
+        uint32_t t = (0u - n) % n;
+        while ((uint32_t)m < t) m = (uint64_t)tandem_next_u32(rng) * n;
+    }
+    return (uint32_t)(m >> 32);
+}
+
+uint64_t tandem_u64_below(tandem_rng *rng, uint64_t n) {
+    uint64_t x = tandem_next_u64(rng), lo = x * n;
+    if (lo < n) {
+        uint64_t t = (0u - n) % n;
+        while (lo < t) {
+            x = tandem_next_u64(rng);
+            lo = x * n;
+        }
+    }
+    return mulhi64(x, n);
+}
+
+void tandem_fill_u32_below(tandem_rng *rng, uint32_t *out, size_t len, uint32_t n) {
+    for (size_t i = 0; i < len; i++) out[i] = tandem_u32_below(rng, n);
+}
+
+void tandem_fill_u64_below(tandem_rng *rng, uint64_t *out, size_t len, uint64_t n) {
+    for (size_t i = 0; i < len; i++) out[i] = tandem_u64_below(rng, n);
+}
+
 /* ---- Public: random access and derived generators --------------------------------------- */
 
 /* Element i of the fill that would start here. Works on a copy, so the cache stays put. */

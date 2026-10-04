@@ -64,6 +64,13 @@ uint32_t tandem_next_char(tandem_rng *rng);
 void tandem_next_c32(tandem_rng *rng, float out[2]);
 void tandem_next_c64(tandem_rng *rng, double out[2]);
 
+/* Bounded draws, uniform on [0, n) by Lemire's multiply and reject over tandem_next_u32 or
+ * tandem_next_u64. They match Rng::urand(range) and urand64(range) of tandem-cuda, and are not
+ * part of the specification. A rejected draw is discarded, so the number of draws consumed
+ * varies and a fill is not random access. n = 0 returns 0. */
+uint32_t tandem_u32_below(tandem_rng *rng, uint32_t n);
+uint64_t tandem_u64_below(tandem_rng *rng, uint64_t n);
+
 /* Fills: n aligned elements, the same values as n scalar draws. */
 void tandem_fill_bool(tandem_rng *rng, bool *out, size_t n);
 void tandem_fill_u8(tandem_rng *rng, uint8_t *out, size_t n);
@@ -78,6 +85,10 @@ void tandem_fill_char(tandem_rng *rng, uint32_t *out, size_t n);
 /* n complex values as 2n interleaved components. */
 void tandem_fill_c32(tandem_rng *rng, float *out, size_t n);
 void tandem_fill_c64(tandem_rng *rng, double *out, size_t n);
+
+/* len bounded draws, the same values as len calls of tandem_u32_below or tandem_u64_below. */
+void tandem_fill_u32_below(tandem_rng *rng, uint32_t *out, size_t len, uint32_t n);
+void tandem_fill_u64_below(tandem_rng *rng, uint64_t *out, size_t len, uint64_t n);
 
 /* Random access: element i of the fill that would start here, without advancing. */
 uint32_t tandem_at_u32(const tandem_rng *rng, uint64_t i);

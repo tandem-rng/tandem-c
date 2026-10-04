@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "../tandem.h"
+#include "cross_below.h"
 
 static int failures;
 
@@ -42,8 +43,49 @@ static void test_set_position(void) {
     }
 }
 
+/* Values and stream position of tandem-cuda's urand(range) and urand64(range). The position
+ * pins the number of rejected draws as well as the values. */
+static void test_below_cross(void) {
+    size_t c, i;
+    for (c = 0; c < sizeof CROSS_U32 / sizeof CROSS_U32[0]; c++) {
+        tandem_rng g = tandem_seed(42, 0, 0), f;
+        tandem_next_bool(&g);
+        f = g;
+        for (i = 0; i < CROSS_COUNT; i++) CHECK(tandem_u32_below(&g, CROSS_U32[c].n) == CROSS_U32[c].want[i]);
+        CHECK(tandem_position(&g) == CROSS_U32[c].end_pos);
+        {
+            uint32_t out[CROSS_COUNT];
+            tandem_fill_u32_below(&f, out, CROSS_COUNT, CROSS_U32[c].n);
+            CHECK(memcmp(out, CROSS_U32[c].want, sizeof out) == 0);
+            CHECK(tandem_position(&f) == CROSS_U32[c].end_pos);
+        }
+    }
+    for (c = 0; c < sizeof CROSS_U64 / sizeof CROSS_U64[0]; c++) {
+        tandem_rng g = tandem_seed(42, 0, 0), f;
+        tandem_next_bool(&g);
+        f = g;
+        for (i = 0; i < CROSS_COUNT; i++) CHECK(tandem_u64_below(&g, CROSS_U64[c].n) == CROSS_U64[c].want[i]);
+        CHECK(tandem_position(&g) == CROSS_U64[c].end_pos);
+        {
+            uint64_t out[CROSS_COUNT];
+            tandem_fill_u64_below(&f, out, CROSS_COUNT, CROSS_U64[c].n);
+            CHECK(memcmp(out, CROSS_U64[c].want, sizeof out) == 0);
+            CHECK(tandem_position(&f) == CROSS_U64[c].end_pos);
+        }
+    }
+}
+
+/* n = 1 and n = 0 return 0 and consume one draw, as core.hpp does. */
+static void test_below_degenerate(void) {
+    tandem_rng g = tandem_seed(1, 2, 0);
+    CHECK(tandem_u32_below(&g, 0) == 0 && tandem_position(&g) == 32);
+    CHECK(tandem_u64_below(&g, 0) == 0 && tandem_position(&g) == 128);
+}
+
 int main(void) {
     test_set_position();
+    test_below_cross();
+    test_below_degenerate();
     if (failures) {
         printf("%d failures\n", failures);
         return 1;
