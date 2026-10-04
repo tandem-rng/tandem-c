@@ -15,7 +15,7 @@ LIBDIR ?= $(PREFIX)/lib
 INCLUDEDIR ?= $(PREFIX)/include
 VERSION ?= 0.1.0
 
-.PHONY: all test vectors cross bench accuracy install clean
+.PHONY: all test vectors cross bench accuracy test-target bench-target install clean
 
 all: libtandem.a
 
@@ -36,6 +36,24 @@ tests/test_api: tests/test_api.c tests/cross_below.h tests/cross_fill_below.h te
 
 tests/test_r123: tests/test_r123.c tandem123.h tandem.c tandem.h
 	$(CC) $(CFLAGS) -o $@ tests/test_r123.c tandem.c $(LDLIBS)
+
+# OpenMP target offload, see tandem_target.c. OMP_FLAGS selects the compiler's offload flags:
+#   clang: -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda --offload-arch=sm_80
+#   nvc:   -mp=gpu -gpu=cc80, with CC=nvc and CFLAGS="-std=c11 -O2"
+# The default runs the target regions on the host, with host memory.
+OMP_FLAGS ?= -fopenmp -DTANDEM_HOST_MEMORY
+
+tests/test_target: tests/test_target.c tandem_target.c tandem123.h tandem.c tandem.h
+	$(CC) $(CFLAGS) $(OMP_FLAGS) -DTANDEM_OPENMP_TARGET -o $@ tests/test_target.c tandem_target.c tandem.c $(LDLIBS)
+
+tools/bench_target: tools/bench_target.c tandem_target.c tandem123.h tandem.c tandem.h
+	$(CC) $(CFLAGS) $(OMP_FLAGS) -DTANDEM_OPENMP_TARGET -o $@ tools/bench_target.c tandem_target.c tandem.c $(LDLIBS)
+
+test-target: tests/test_target
+	./tests/test_target
+
+bench-target: tools/bench_target
+	./tools/bench_target
 
 tests/test_cpp: tests/test_cpp.cpp tandem.hpp tandem.o
 	$(CXX) $(CXXFLAGS) -o $@ tests/test_cpp.cpp tandem.o $(LDLIBS)
@@ -87,4 +105,4 @@ install: libtandem.a
 	    -e 's|@VERSION@|$(VERSION)|' packaging/tandem.pc.in > $(DESTDIR)$(LIBDIR)/pkgconfig/tandem.pc
 
 clean:
-	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_cpp tools/bench tools/bench_std tools/gen_cross tools/normal_accuracy
+	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_cpp tools/bench tools/bench_std tools/gen_cross tools/normal_accuracy tests/test_target tools/bench_target

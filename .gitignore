@@ -10,3 +10,5 @@ tests/test_api
 tools/gen_cross
 tools/normal_accuracy
 tests/test_r123
+tests/test_target
+tools/bench_target

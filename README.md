@@ -135,6 +135,30 @@ and 1, 4 and 14 threads print the hash of a serial run. CI runs the same check.
 (`spack/package.py`) and a conda-forge style recipe (`conda/recipe.yaml`). Neither is submitted to
 Spack or conda-forge yet, and both build from the `main` branch.
 
+## OpenMP target offload
+
+`tandem_target.c` provides `tandem_fill_u32_target`, `_u64_`, `_f32_` and `_f64_`, which fill
+device memory from a `#pragma omp target teams distribute parallel for` region, one thread per
+chunk, with the same values and the same final position as the host fills. Declare them by
+defining `TANDEM_OPENMP_TARGET` before `tandem.h`, and compile `tandem_target.c` with the
+offload flags of your compiler:
+
+```sh
+make test-target OMP_FLAGS="-mp=gpu -gpu=cc80" CC=nvc CFLAGS="-std=c11 -O2"        # nvc
+make test-target OMP_FLAGS="-fopenmp -fopenmp-targets=nvptx64-nvidia-cuda --offload-arch=sm_80"
+```
+
+The plain build does not see any of it. The default `OMP_FLAGS` run the target regions on the
+host with host memory, which is what CI does. `tests/test_target.c` compares the four fills
+bit for bit with the host fills over four chunk lengths, aligned and unaligned starts, and
+sizes from 0 to 2^20.
+
+On an A100 40 GB PCIe (driver 570, GPU idle before each run) with nvc 25.3, `make bench-target`
+writes 2^28 elements into device memory at 480 to 850 GiB/s over ten runs, median about 570,
+the same for all four types, against 1386 GiB/s for the CUDA kernels of tandem-cuda. The
+conda-forge clang 19 of tandem-cuda's pixi environment ships no `libomptarget` device
+runtime, so it cannot build the offload target there. nvc can.
+
 ## Tests
 
 ```sh
@@ -151,6 +175,7 @@ with fixtures that `tools/gen_cross.cpp` computes from the shared core of
 [tandem-cuda](https://github.com/tandem-rng/tandem-cuda). f32 normals match within 16 ulps. The device-derived fill fixtures of tandem-cuda are copied to `tests/cuda_fill_*.h`.
 `make cross` regenerates the fixtures.
 `tests/test_r123.c` checks `tandem123.h` against the fills and the dumps.
+`tests/test_target.c` checks the OpenMP target fills against the host fills.
 `tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`,
 `set_position` and the extra draw types, agrees with the C API and runs `<random>`. Compiled
 as C++20 it also checks `std::uniform_random_bit_generator`.

@@ -83,3 +83,26 @@ jobs:
           git clone --depth 1 https://github.com/tandem-rng/spec ../tandem-spec
           make vectors
           git diff --exit-code tests/vectors.h
+
+  # The OpenMP target fills. A runner has no GPU, so the target regions run on the host with host
+  # memory, which checks the kernel logic in parallel. The offload compile is attempted and
+  # reported, but it may be unavailable on a runner without the CUDA toolchain.
+  openmp-target:
+    name: ubuntu-latest / clang / openmp target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the latest clang and its OpenMP runtime
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          sudo bash /tmp/llvm.sh
+          v=$(ls /usr/bin/clang-[0-9]* | sed 's|.*/clang-||' | sort -n | tail -1)
+          sudo apt-get install -y "libomp-$v-dev"
+          echo "CC=clang-$v" >> "$GITHUB_ENV"
+      - name: Run the target fills on the host
+        run: make test-target CFLAGS="-std=c23 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror"
+      - name: Compile the nvptx offload target
+        continue-on-error: true
+        run: |
+          $CC -std=c23 -O2 -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda --offload-arch=sm_80 \
+            -DTANDEM_OPENMP_TARGET -c -o /tmp/tandem_target.o tandem_target.c
