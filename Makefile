@@ -5,14 +5,10 @@ endif
 ifeq ($(origin CXX),default)
 CXX = clang++
 endif
-# The normal fills use explicit fused multiply-adds, which x86 needs -mfma to compile to one
-# instruction (Haswell or newer). -ffp-contract=off keeps every other expression unfused, so
-# all compilers produce the same normals.
-ARCH := $(shell uname -m)
-ifneq ($(filter x86_64 amd64,$(ARCH)),)
-FMAFLAGS = -mfma
-endif
-CFLAGS ?= -std=c23 -O2 -ffp-contract=off $(FMAFLAGS) -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+# -ffp-contract=off keeps every expression outside the explicit fused multiply-adds unfused, so
+# all compilers produce the same normals. x86 needs no -m flags: tandem.c picks its AVX2 and FMA
+# copy at run time.
+CFLAGS ?= -std=c23 -O2 -ffp-contract=off -Wall -Wextra -Wpedantic -Wconversion -Wshadow
 CXXFLAGS ?= -std=c++23 -O2 -Wall -Wextra -Wpedantic -Wshadow
 SPEC_VECTORS ?= ../tandem-spec/vectors.json
 LDLIBS ?= -lm

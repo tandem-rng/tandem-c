@@ -38,13 +38,17 @@ produces the stream the specification defines, bit for bit, for every type it su
   `make bench` reports the normal fills too.
   Every multiply-add in that loop is an explicit `fma`, and the loop is built with floating
   point contraction off, so every compiler and target produces the same bits:
-  `tests/test_normal_bits.c` checks a hash of 10^7 normals against the value from the M4. On
-  x86 build with `-mfma` (Haswell or newer; the Makefile adds it), or `fma` is a library call
-  that is correct but about seven times slower.
+  `tests/test_normal_bits.c` checks a hash of 10^7 normals against the value from the M4.
+- On x86-64 with GCC 12+ or clang, `tandem.c` compiles the row loop and the normal loop a
+  second time for AVX2 and FMA and picks that copy at run time. A plain `-O2` build with no
+  `-m` flags so gets 256-bit rows and hardware fused multiply-adds on Haswell, Zen and newer,
+  and still runs on older CPUs, where `fma` is a library call that is correct but about seven
+  times slower. With `-mavx2 -mfma` only the AVX2 copy remains. Define `TANDEM_NO_AVX2` to
+  leave it out. Both copies give the same bits.
 - The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
-  written with vector extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD`
-  for the scalar version. After alignment every integer fill is one byte stream, so one
-  routine serves all widths and floats convert in place.
+  written with vector extensions and compiles to NEON, SSE2 or, in the AVX2 copy, one 256-bit
+  vector per word. Define `TANDEM_NO_SIMD` for the scalar version. After alignment every
+  integer fill is one byte stream, so one routine serves all widths and floats convert in place.
 
 ## Use
 
@@ -180,6 +184,8 @@ with fixtures that `tools/gen_cross.cpp` computes from the shared core of
 [tandem-cuda](https://github.com/tandem-rng/tandem-cuda). f32 normals match within 16 ulps. The device-derived fill fixtures of tandem-cuda are copied to `tests/cuda_fill_*.h`.
 `make cross` regenerates the fixtures.
 `tests/test_r123.c` checks `tandem123.h` against the fills and the dumps.
+On x86-64 CI runs the suite three times: plain `-O2`, which takes the AVX2 copy on the runner,
+`-DTANDEM_NO_AVX2` for the base copy, and `-mavx2 -mfma`.
 `tests/test_target.c` checks the OpenMP target fills against the host fills.
 `tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`,
 `set_position` and the extra draw types, agrees with the C API and runs `<random>`. Compiled

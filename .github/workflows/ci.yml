@@ -55,16 +55,24 @@ jobs:
         if: matrix.mode != 'c11'
         run: |
           $CC --version | head -1
-          fma=""; [ "$(uname -m)" = x86_64 ] && fma="-mfma"
           if [ "${{ matrix.mode }}" = "sanitizers" ]; then
             san="-O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all"
-            export CFLAGS="-std=c23 -ffp-contract=off $fma -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror $san"
+            export CFLAGS="-std=c23 -ffp-contract=off -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror $san"
             export CXXFLAGS="-std=c++23 -Wall -Wextra -Wpedantic -Wshadow -Werror $san"
           else
-            export CFLAGS="-std=c23 -O2 -ffp-contract=off $fma -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror"
+            export CFLAGS="-std=c23 -O2 -ffp-contract=off -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror"
             export CXXFLAGS="-std=c++23 -O2 -Wall -Wextra -Wpedantic -Wshadow -Werror"
           fi
           make test
+          # The runner has AVX2, so the plain build tests the AVX2 copy. Test the base copy, and
+          # the build that needs no run-time check.
+          if [ "$(uname -m)" = x86_64 ] && [ "${{ matrix.mode }}" = default ]; then
+            base="$CFLAGS"
+            for extra in -DTANDEM_NO_AVX2 "-mavx2 -mfma"; do
+              make clean
+              CFLAGS="$base $extra" make test
+            done
+          fi
 
       - name: Build and test as strict C11 and C++17
         if: matrix.mode == 'c11'
