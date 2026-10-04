@@ -136,16 +136,16 @@ public:
         else static_assert(sizeof(T) == 0, "tandem::rng::below: unsupported type");
     }
 
-    /* Both Box-Muller normals of one pair of uniforms, cos half first: tandem_normal2_f64 or f32. */
-    template <class T = double> std::array<T, 2> normal2() noexcept {
+    /* Both Box-Muller normals of one pair of float uniforms, cos half first: tandem_normal2_f32.
+     * Double normals come one per draw, so there is no double pair. */
+    template <class T> std::array<T, 2> normal2() noexcept {
+        static_assert(std::is_same_v<T, float>, "tandem::rng::normal2: float only");
         std::array<T, 2> z;
-        if constexpr (std::is_same_v<T, double>) tandem_normal2_f64(&s_, z.data());
-        else if constexpr (std::is_same_v<T, float>) tandem_normal2_f32(&s_, z.data());
-        else static_assert(sizeof(T) == 0, "tandem::rng::normal2: unsupported type");
+        tandem_normal2_f32(&s_, z.data());
         return z;
     }
 
-    /* Standard normal by Box-Muller, float or double: the values of tandem_normal_f64 and f32. */
+    /* Standard normal, float or double: the values of tandem_normal_f32 and f64. */
     template <class T = double> T normal() noexcept {
         if constexpr (std::is_same_v<T, double>) return tandem_normal_f64(&s_);
         else if constexpr (std::is_same_v<T, float>) return tandem_normal_f32(&s_);

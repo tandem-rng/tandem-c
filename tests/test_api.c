@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "../tandem.h"
+#include "../tandem_normal_tables.h"
 #include "cross_below.h"
 #include "cross_exponential.h"
 #include "cross_fill_below.h"
@@ -149,18 +150,20 @@ static void test_below_degenerate(void) {
     CHECK(tandem_u64_below(&g, 0) == 0 && tandem_position(&g) == 128);
 }
 
-/* Box-Muller pairs of tandem-cuda's host normal2 and normalf2, which share the explicit-fma
- * loop, so every bit must match. The position pins two uniforms per pair. */
+/* The f64 fills of the published fixture, from unaligned starts and with a miss of each kind, and
+ * the f32 Box-Muller pairs of tandem-cuda's host normalf2, which shares the explicit-fma loop.
+ * Every bit must match. The positions pin one draw per f64 element and two per f32 pair. */
 static void test_normal_cross(void) {
-    tandem_rng g = tandem_seed(42, 0, 0);
+    tandem_rng g;
     size_t i;
-    tandem_next_bool(&g);
-    for (i = 0; i < CROSS_NORMAL_COUNT; i++) {
-        double z[2];
-        tandem_normal2_f64(&g, z);
-        CHECK(memcmp(z, &CROSS_NORMAL[2 * i], sizeof z) == 0);
+    for (i = 0; i < sizeof CROSS_NORMAL / sizeof CROSS_NORMAL[0]; i++) {
+        double got[CROSS_NORMAL_COUNT];
+        g = tandem_seed(42, 0, 0);
+        tandem_set_position(&g, CROSS_NORMAL[i].start);
+        tandem_fill_normal_f64(&g, got, CROSS_NORMAL_COUNT);
+        CHECK(memcmp(got, CROSS_NORMAL[i].want, sizeof got) == 0);
+        CHECK(tandem_position(&g) == CROSS_NORMAL[i].end_pos);
     }
-    CHECK(tandem_position(&g) == CROSS_NORMAL_END_POS);
 
     g = tandem_seed(42, 0, 0);
     tandem_next_bool(&g);
@@ -172,31 +175,52 @@ static void test_normal_cross(void) {
     CHECK(tandem_position(&g) == CROSS_NORMALF_END_POS);
 }
 
-/* The scalar normal is the cos half of the pair, and a fill is the flattened pairs, across
+/* An f64 fill equals the scalar draws, and a fill cut at odd elements, at a missed element and
+ * just after it equals the whole fill, with the same end position. The fallback streams are
+ * keyed by the global draw index, so a miss resolves the same in any piece. The fill crosses
+ * blocks of 512 draws and several flushes of queued misses, from an unaligned start. */
+static void test_normal_fills_f64(void) {
+    enum { N = 40000 };
+    static double want[N], got[N];
+    static uint64_t raw[N];
+    size_t cuts[8] = {1, 7, 511, 513, 4097}, ncuts = 5, i;
+    tandem_rng a = tandem_seed(7, 9, 0), b, d;
+    tandem_next_u8(&a);
+    b = d = a;
+    for (i = 0; i < N; i++) want[i] = tandem_normal_f64(&a);
+    tandem_fill_normal_f64(&b, got, N);
+    CHECK(memcmp(want, got, sizeof got) == 0 && tandem_position(&b) == tandem_position(&a));
+
+    /* The first miss, then the first after 20000 elements, past several flushes of the queue. */
+    b = d;
+    tandem_fill_u64(&b, raw, N);
+    for (i = 0; i < N && ncuts < 8; i++)
+        if ((raw[i] >> 11) >= ZIG_K[raw[i] & (ZIG_LAYERS - 1u)] && (ncuts == 5 || i > 20000)) {
+            cuts[ncuts++] = i;
+            if (ncuts == 6) cuts[ncuts++] = i + 1;
+        }
+    CHECK(ncuts == 8);
+    for (i = 0; i < ncuts; i++) {
+        b = d;
+        tandem_fill_normal_f64(&b, got, cuts[i]);
+        tandem_fill_normal_f64(&b, got + cuts[i], N - cuts[i]);
+        CHECK(memcmp(want, got, sizeof got) == 0 && tandem_position(&b) == tandem_position(&a));
+    }
+}
+
+/* The scalar f32 normal is the cos half of the pair, and a fill is the flattened pairs, across
  * block boundaries and from an unaligned start. An odd n drops the last sin half but still
  * consumes both uniforms. */
-static void test_normal_fills(void) {
+static void test_normal_fills_f32(void) {
     enum { N = 1000 };
-    double want[N], got[N];
     float want32[N], got32[N];
     size_t n, i;
 
     for (n = 0; n <= N; n += (n < 4 ? 1 : 249)) {
-        tandem_rng a = tandem_seed(7, 9, 0), b, c, d;
+        tandem_rng a = tandem_seed(7, 9, 0), c;
         size_t pairs = n / 2 + n % 2;
         tandem_next_u8(&a);
-        b = c = d = a;
-        for (i = 0; i < pairs; i++) {
-            double z[2];
-            tandem_normal2_f64(&a, z);
-            want[2 * i] = z[0];
-            if (2 * i + 1 < n) want[2 * i + 1] = z[1];
-        }
-        tandem_fill_normal_f64(&b, got, n);
-        CHECK(memcmp(want, got, n * sizeof *got) == 0);
-        CHECK(tandem_position(&b) == tandem_position(&a));
-
-        a = c;
+        c = a;
         for (i = 0; i < pairs; i++) {
             float z[2];
             tandem_normal2_f32(&a, z);
@@ -206,28 +230,19 @@ static void test_normal_fills(void) {
         tandem_fill_normal_f32(&c, got32, n);
         CHECK(memcmp(want32, got32, n * sizeof *got32) == 0);
         CHECK(tandem_position(&c) == tandem_position(&a));
-
-        if (n) {
-            double z[2];
-            tandem_normal2_f64(&d, z);
-            CHECK(want[0] == z[0]);
-        }
     }
     {
         tandem_rng a = tandem_seed(3, 4, 0), b = a;
-        double z[2];
         float zf[2];
-        tandem_normal2_f64(&a, z);
-        CHECK(tandem_normal_f64(&b) == z[0] && tandem_position(&b) == tandem_position(&a));
-        a = b = tandem_seed(3, 4, 0);
         tandem_normal2_f32(&a, zf);
         CHECK(tandem_normal_f32(&b) == zf[0] && tandem_position(&b) == tandem_position(&a));
     }
 }
 
 /* Fixtures that tandem-cuda derives on the device: fills from the key of seed 42 at several
- * start positions. Bounded values are exact, f64 normals match to 1e-12 relative and f32
- * normals to 16 ulps plus an absolute floor. */
+ * start positions. Bounded values are exact and f32 normals match to 16 ulps plus an absolute
+ * floor. The f64 normal rows are tandem-cuda's Box-Muller until it moves to the ziggurat, so
+ * they are not checked. */
 static void test_device_fixtures(void) {
     size_t c, i;
     for (c = 0; c < sizeof CROSS_BELOW32 / sizeof CROSS_BELOW32[0]; c++) {
@@ -255,13 +270,6 @@ static void test_device_fixtures(void) {
         tandem_fill_u64_below(&g, out, 64, CROSS_BELOW64_AT[c].range);
         CHECK(memcmp(out, CROSS_BELOW64_AT[c].out, sizeof out) == 0);
     }
-    for (c = 0; c < sizeof CROSS_NORMAL64 / sizeof CROSS_NORMAL64[0]; c++) {
-        tandem_rng g = tandem_from_key(CROSS_FILL_KEY, CROSS_NORMAL64[c].pos, 0);
-        double out[64];
-        tandem_fill_normal_f64(&g, out, CROSS_NORMAL64[c].n);
-        for (i = 0; i < CROSS_NORMAL64[c].n; i++)
-            CHECK(fabs(out[i] - CROSS_NORMAL64[c].out[i]) <= 1e-12 * fabs(CROSS_NORMAL64[c].out[i]));
-    }
     for (c = 0; c < sizeof CROSS_NORMAL32 / sizeof CROSS_NORMAL32[0]; c++) {
         tandem_rng g = tandem_from_key(CROSS_FILL_KEY, CROSS_NORMAL32[c].pos, 0);
         float out[64];
@@ -271,7 +279,9 @@ static void test_device_fixtures(void) {
     }
 }
 
-/* An empty bounded or normal fill advances nothing, even from an unaligned position. */
+/* An empty bounded, f32 normal or exponential fill advances nothing, even from an unaligned
+ * position. An empty f64 normal fill aligns the position to 64 and writes nothing, as Appendix A
+ * says. */
 static void test_empty_fills(void) {
     uint64_t pos[] = {1, 5, 33, 65, 1001};
     size_t i;
@@ -279,16 +289,17 @@ static void test_empty_fills(void) {
         tandem_rng g = tandem_seed(1, 2, 0);
         uint32_t u32;
         uint64_t u64;
-        double d;
+        double d = 2;
         float f;
         tandem_set_position(&g, pos[i]);
         tandem_fill_u32_below(&g, &u32, 0, 10);
         tandem_fill_u64_below(&g, &u64, 0, 10);
-        tandem_fill_normal_f64(&g, &d, 0);
         tandem_fill_normal_f32(&g, &f, 0);
         tandem_fill_exponential_f64(&g, &d, 0);
         tandem_fill_exponential_f32(&g, &f, 0);
         CHECK(tandem_position(&g) == pos[i]);
+        tandem_fill_normal_f64(&g, &d, 0);
+        CHECK(tandem_position(&g) == ((pos[i] + 63u) & ~(uint64_t)63u) && d == 2);
     }
 }
 
@@ -421,7 +432,8 @@ int main(void) {
     test_fill_below_cut();
     test_below_degenerate();
     test_normal_cross();
-    test_normal_fills();
+    test_normal_fills_f64();
+    test_normal_fills_f32();
     test_empty_fills();
     test_exponential_cross();
     test_exponential_fills();

@@ -86,12 +86,17 @@ jobs:
               make test
           done
 
-      - name: Vector header is current
+      - name: Vector and normal table headers are current
         if: matrix.mode == 'default'
         run: |
           git clone --depth 1 https://github.com/tandem-rng/spec ../tandem-spec
-          make vectors
-          git diff --exit-code tests/vectors.h
+          make vectors tables
+          git diff --exit-code tests/vectors.h tandem_normal_tables.h
+
+      # 10^8 normals take half a minute, so one job checks their distribution.
+      - name: Normal statistics
+        if: matrix.mode == 'default' && matrix.os == 'ubuntu-latest' && matrix.cc == 'clang'
+        run: make stats
 
   # The OpenMP target fills. A runner has no GPU, so the target regions run on the host with host
   # memory, which checks the kernel logic in parallel. The offload compile is attempted and

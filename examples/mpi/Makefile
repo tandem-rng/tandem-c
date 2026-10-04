@@ -1,7 +1,7 @@
 CC ?= cc
 MPICC ?= mpicc
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
-LIB = ../../tandem.c ../../tandem.h
+LIB = ../../tandem.c ../../tandem.h ../../tandem_normal_tables.h
 
 .PHONY: all check clean
 
