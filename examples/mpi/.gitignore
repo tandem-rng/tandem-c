@@ -1,0 +1,6 @@
+serial
+mpi
+omp
+.pixi/
+pixi.lock
+*.dSYM/

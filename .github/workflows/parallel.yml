@@ -1,0 +1,24 @@
+name: Parallel example
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# The MPI and OpenMP examples must print the serial hash for 1, 2 and 4 ranks and 1, 4 and 14
+# threads, which shows that the results do not depend on the decomposition.
+jobs:
+  parallel:
+    name: ubuntu-latest / MPICH and OpenMP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: prefix-dev/setup-pixi@v0.10.2
+        with:
+          manifest-path: examples/mpi/pixi.toml
+          environments: mpi
+          locked: false
+      - run: pixi run --manifest-path examples/mpi/pixi.toml -e mpi check

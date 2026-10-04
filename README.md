@@ -108,6 +108,26 @@ generator with that key and `K` at position 0. The specification limits position
 so `ctr.v[1]` stays below 2^24. `tests/test_r123.c` checks this against `tandem_fill_u32`,
 `tandem_block`, and the reference stream dumps.
 
+## Parallel use
+
+Element `i` of a fill is draw `i`, at bit `64 i` for doubles, so a rank or thread that starts
+its generator at the position of its first element writes its part of one global fill.
+`tandem_split` gives one stream per task from the key alone, and `tandem_sub` one per purpose.
+Results then do not depend on the number of ranks or threads.
+[Appendix B](https://github.com/tandem-rng/spec/blob/main/SPEC.md#appendix-b-parallel-decomposition-non-normative)
+of the specification gives the patterns.
+
+```c
+tandem_rng mine = tandem_from_key(key, 64 * first, K);   /* key and K of the global generator */
+tandem_fill_f64(&mine, x + first, count);                /* x[first .. first + count) */
+tandem_rng task = tandem_split(&noise, task_index);      /* by task, not by rank */
+```
+
+`examples/mpi` fills a field of 2^24 doubles across MPI ranks or OpenMP threads, draws a batch
+of normals per block from `tandem_split(block)`, and prints a hash of the result.
+`pixi run -e mpi check` in that directory builds it with MPICH and checks that 1, 2 and 4 ranks
+and 1, 4 and 14 threads print the hash of a serial run. CI runs the same check.
+
 ## Tests
 
 ```sh
