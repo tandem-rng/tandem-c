@@ -26,6 +26,11 @@ produces the stream the specification defines, bit for bit, for every type it su
   normals draw two f32 uniforms and compute the radius in float, so they agree across ports to
   a few ulps because float libm functions differ. Uniforms are bit exact and f64 normals agree
   to about 1e-12 relative.
+  The normal fills and draws share one loop without libm calls: polynomials for the logarithm
+  of the exponent-split argument and for the sine and cosine of the angle after an exact
+  quarter-turn reduction, which the compiler vectorizes. `make accuracy` compares the fills with
+  libm on 5e7 pairs. The f64 normals agree to 1e-15 relative and the f32 normals to 3.3 ulps.
+  `make bench` reports the normal fills too.
 - The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
   written with vector extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD`
   for the scalar version. After alignment every integer fill is one byte stream, so one

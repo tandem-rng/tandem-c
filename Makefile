@@ -6,7 +6,7 @@ SPEC_VECTORS ?= ../tandem-spec/vectors.json
 LDLIBS ?= -lm
 CORE_INCLUDE ?= ../tandem-cuda/include
 
-.PHONY: all test vectors cross bench clean
+.PHONY: all test vectors cross bench accuracy clean
 
 all: libtandem.a
 
@@ -40,6 +40,9 @@ tools/bench: tools/bench.c tandem.c tandem.h
 tools/bench_std: tools/bench_std.cpp tandem.hpp tandem.o
 	$(CXX) $(CXXFLAGS) -o $@ tools/bench_std.cpp tandem.o $(LDLIBS)
 
+tools/normal_accuracy: tools/normal_accuracy.c tandem.c tandem.h
+	$(CC) $(CFLAGS) -o $@ tools/normal_accuracy.c tandem.c $(LDLIBS)
+
 bench: tools/bench tools/bench_std
 	./tools/bench
 	./tools/bench_std
@@ -47,6 +50,9 @@ bench: tools/bench tools/bench_std
 # Regenerate the vector header from a checkout of https://github.com/tandem-rng/spec.
 vectors:
 	python3 tools/gen_vectors.py $(SPEC_VECTORS) > tests/vectors.h
+
+accuracy: tools/normal_accuracy
+	./tools/normal_accuracy
 
 # Regenerate the cross-check fixtures from a checkout of https://github.com/tandem-rng/tandem-cuda.
 tools/gen_cross: tools/gen_cross.cpp
@@ -60,4 +66,4 @@ cross: tools/gen_cross
 	cp $(CORE_INCLUDE)/../tests/cross_fill_normal.h tests/cuda_fill_normal.h
 
 clean:
-	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_cpp tools/bench tools/bench_std tools/gen_cross
+	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_cpp tools/bench tools/bench_std tools/gen_cross tools/normal_accuracy
