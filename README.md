@@ -24,8 +24,8 @@ produces the stream the specification defines, bit for bit, for every type it su
   (Box-Muller, which needs `-lm`) go beyond the specification and return the same values as
   tandem-cuda. The scalar bounded draws loop on rejection. The bounded fills use the parallel
   rule of tandem-cuda instead: element i maps draw i of the plain fill, which keeps the SIMD
-  speed, and a rejected draw retries on a fallback generator, so a fill consumes exactly `len`
-  draws. A Box-Muller step gives two normals: `tandem_normal2_f64` and `_f32` return both
+  speed, and a rejected draw retries on a fallback generator keyed by the global draw index, so a fill
+  consumes exactly `len` draws and a fill cut anywhere equals the whole fill. A Box-Muller step gives two normals: `tandem_normal2_f64` and `_f32` return both
   (cos half first), `tandem_normal_*` returns the cos half, and `tandem_fill_normal_*` writes
   the flattened pairs, so an odd count still consumes `2 * ceil(n / 2)` uniforms. The f32
   normals draw two f32 uniforms and compute the radius in float, so they agree across ports to

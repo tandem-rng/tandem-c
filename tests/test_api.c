@@ -84,7 +84,7 @@ static void test_fill_below(void) {
     for (c = 0; c < sizeof CROSS_FILL_U32 / sizeof CROSS_FILL_U32[0]; c++) {
         tandem_rng g = tandem_seed(42, 0, 0), s;
         uint32_t out[CROSS_COUNT];
-        tandem_next_bool(&g);
+        tandem_set_position(&g, CROSS_FILL_U32[c].start);
         s = g;
         tandem_fill_u32_below(&g, out, CROSS_COUNT, CROSS_FILL_U32[c].n);
         CHECK(memcmp(out, CROSS_FILL_U32[c].want, sizeof out) == 0);
@@ -95,10 +95,48 @@ static void test_fill_below(void) {
     for (c = 0; c < sizeof CROSS_FILL_U64 / sizeof CROSS_FILL_U64[0]; c++) {
         tandem_rng g = tandem_seed(42, 0, 0);
         uint64_t out[CROSS_COUNT];
-        tandem_next_bool(&g);
+        tandem_set_position(&g, CROSS_FILL_U64[c].start);
         tandem_fill_u64_below(&g, out, CROSS_COUNT, CROSS_FILL_U64[c].n);
         CHECK(memcmp(out, CROSS_FILL_U64[c].want, sizeof out) == 0);
         CHECK(tandem_position(&g) == CROSS_FILL_U64[c].end_pos);
+    }
+}
+
+/* A fill cut at any element boundary equals the whole fill, rejected draws included, because
+ * the fallback is keyed by the global draw index. Starts at nonzero, unaligned positions and
+ * ranges with many rejections. */
+static void test_fill_below_cut(void) {
+    enum { N = 300 };
+    uint64_t starts[] = {1, 12345, 100000};
+    size_t cuts[] = {1, 7, 100, 299}, s, c, i;
+    for (s = 0; s < sizeof starts / sizeof starts[0]; s++)
+        for (c = 0; c < sizeof cuts / sizeof cuts[0]; c++) {
+            tandem_rng whole = tandem_seed(5, 6, 0), part = whole;
+            uint32_t w32[N], p32[N];
+            uint64_t w64[N], p64[N];
+            size_t cut = cuts[c];
+            tandem_set_position(&whole, starts[s]);
+            part = whole;
+            tandem_fill_u32_below(&whole, w32, N, 0xc0000001u);
+            tandem_fill_u32_below(&part, p32, cut, 0xc0000001u);
+            tandem_fill_u32_below(&part, p32 + cut, N - cut, 0xc0000001u);
+            CHECK(memcmp(w32, p32, sizeof w32) == 0 && tandem_position(&whole) == tandem_position(&part));
+            tandem_set_position(&whole, starts[s]);
+            part = whole;
+            tandem_fill_u64_below(&whole, w64, N, 0xc000000000000001ull);
+            tandem_fill_u64_below(&part, p64, cut, 0xc000000000000001ull);
+            tandem_fill_u64_below(&part, p64 + cut, N - cut, 0xc000000000000001ull);
+            CHECK(memcmp(w64, p64, sizeof w64) == 0 && tandem_position(&whole) == tandem_position(&part));
+        }
+    /* The same fill from the same key differs between starts that share elements: no shared fallback. */
+    {
+        tandem_rng a = tandem_seed(5, 6, 0), b = a;
+        uint32_t x[N], y[N];
+        tandem_set_position(&a, 0);
+        tandem_set_position(&b, 32);
+        tandem_fill_u32_below(&a, x, N, 0xc0000001u);
+        tandem_fill_u32_below(&b, y, N - 1, 0xc0000001u);
+        for (i = 0; i + 1 < N; i++) CHECK(x[i + 1] == y[i]);
     }
 }
 
@@ -244,6 +282,7 @@ int main(void) {
     test_set_position();
     test_below_cross();
     test_fill_below();
+    test_fill_below_cut();
     test_below_degenerate();
     test_normal_cross();
     test_normal_fills();
