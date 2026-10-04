@@ -83,8 +83,8 @@ static void fill_below() {
     std::printf("};\n");
 }
 
-// log and cos differ in the last place between libms, so the normals are stored as decimal
-// text with 17 digits and compared within a relative tolerance.
+// On a host, core.hpp's normal2 and normalf2 run the explicit-fma loop of tandem.c, so the
+// values are exact. 17 and 9 significant digits round-trip every double and float.
 static void normal() {
     tandem::Rng g(42);
     g.bit();

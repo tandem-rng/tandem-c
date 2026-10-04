@@ -147,9 +147,8 @@ static void test_below_degenerate(void) {
     CHECK(tandem_u64_below(&g, 0) == 0 && tandem_position(&g) == 128);
 }
 
-/* Box-Muller pairs of tandem-cuda's normal2 and normalf2. log, cos and sin may differ in the
- * last place between libms: 1e-12 relative for f64, 16 ulps plus an absolute floor near the zeros
- * of cos and sin for f32. The position pins two uniforms per pair. */
+/* Box-Muller pairs of tandem-cuda's host normal2 and normalf2, which share the explicit-fma
+ * loop, so every bit must match. The position pins two uniforms per pair. */
 static void test_normal_cross(void) {
     tandem_rng g = tandem_seed(42, 0, 0);
     size_t i;
@@ -157,8 +156,7 @@ static void test_normal_cross(void) {
     for (i = 0; i < CROSS_NORMAL_COUNT; i++) {
         double z[2];
         tandem_normal2_f64(&g, z);
-        CHECK(fabs(z[0] - CROSS_NORMAL[2 * i]) <= 1e-12 * fabs(CROSS_NORMAL[2 * i]));
-        CHECK(fabs(z[1] - CROSS_NORMAL[2 * i + 1]) <= 1e-12 * fabs(CROSS_NORMAL[2 * i + 1]));
+        CHECK(memcmp(z, &CROSS_NORMAL[2 * i], sizeof z) == 0);
     }
     CHECK(tandem_position(&g) == CROSS_NORMAL_END_POS);
 
@@ -167,8 +165,7 @@ static void test_normal_cross(void) {
     for (i = 0; i < CROSS_NORMAL_COUNT; i++) {
         float z[2];
         tandem_normal2_f32(&g, z);
-        CHECK(fabsf(z[0] - CROSS_NORMALF[2 * i]) <= 16.0f * 0x1p-23f * fabsf(CROSS_NORMALF[2 * i]) + 1e-6f);
-        CHECK(fabsf(z[1] - CROSS_NORMALF[2 * i + 1]) <= 16.0f * 0x1p-23f * fabsf(CROSS_NORMALF[2 * i + 1]) + 1e-6f);
+        CHECK(memcmp(z, &CROSS_NORMALF[2 * i], sizeof z) == 0);
     }
     CHECK(tandem_position(&g) == CROSS_NORMALF_END_POS);
 }

@@ -181,7 +181,10 @@ access against reference stream dumps in `tests/data`, written by `tools/dump_st
 `tests/test_api.c` checks the functions that are not part of the specification's draws. The
 bounded integers (scalar and fill) and normals are compared, values and stream position,
 with fixtures that `tools/gen_cross.cpp` computes from the shared core of
-[tandem-cuda](https://github.com/tandem-rng/tandem-cuda). f32 normals match within 16 ulps. The device-derived fill fixtures of tandem-cuda are copied to `tests/cuda_fill_*.h`.
+[tandem-cuda](https://github.com/tandem-rng/tandem-cuda). The normals match bit for bit,
+because the host core runs the same explicit-fma loop. The device-derived fill fixtures of
+tandem-cuda are copied to `tests/cuda_fill_*.h`, where device normals match within 1e-12
+relative for f64 and 16 ulps for f32.
 `make cross` regenerates the fixtures.
 `tests/test_r123.c` checks `tandem123.h` against the fills and the dumps.
 On x86-64 CI runs the suite three times: plain `-O2`, which takes the AVX2 copy on the runner,
