@@ -98,49 +98,83 @@ static void test_below_degenerate(void) {
     CHECK(tandem_u64_below(&g, 0) == 0 && tandem_position(&g) == 128);
 }
 
-/* Box-Muller of tandem-cuda's normal(). log and cos may differ in the last place between
- * libms, so values match to 1e-12 relative. The position pins two 64-bit draws per normal. */
+/* Box-Muller pairs of tandem-cuda's normal2 and normalf2. log, cos and sin may differ in the
+ * last place between libms: 1e-12 relative for f64, 8 ulps plus an absolute floor near the zeros
+ * of cos and sin for f32. The position pins two uniforms per pair. */
 static void test_normal_cross(void) {
     tandem_rng g = tandem_seed(42, 0, 0);
     size_t i;
     tandem_next_bool(&g);
     for (i = 0; i < CROSS_NORMAL_COUNT; i++) {
-        double z = tandem_normal_f64(&g);
-        CHECK(fabs(z - CROSS_NORMAL[i]) <= 1e-12 * fabs(CROSS_NORMAL[i]));
+        double z[2];
+        tandem_normal2_f64(&g, z);
+        CHECK(fabs(z[0] - CROSS_NORMAL[2 * i]) <= 1e-12 * fabs(CROSS_NORMAL[2 * i]));
+        CHECK(fabs(z[1] - CROSS_NORMAL[2 * i + 1]) <= 1e-12 * fabs(CROSS_NORMAL[2 * i + 1]));
     }
     CHECK(tandem_position(&g) == CROSS_NORMAL_END_POS);
 
-    /* Float libm functions differ between platforms: 8 ulps and an absolute floor near the zeros
-     * of cos. The position is exact. */
     g = tandem_seed(42, 0, 0);
     tandem_next_bool(&g);
     for (i = 0; i < CROSS_NORMAL_COUNT; i++) {
-        float z = tandem_normal_f32(&g);
-        CHECK(fabsf(z - CROSS_NORMALF[i]) <= 8.0f * 0x1p-23f * fabsf(CROSS_NORMALF[i]) + 1e-6f);
+        float z[2];
+        tandem_normal2_f32(&g, z);
+        CHECK(fabsf(z[0] - CROSS_NORMALF[2 * i]) <= 8.0f * 0x1p-23f * fabsf(CROSS_NORMALF[2 * i]) + 1e-6f);
+        CHECK(fabsf(z[1] - CROSS_NORMALF[2 * i + 1]) <= 8.0f * 0x1p-23f * fabsf(CROSS_NORMALF[2 * i + 1]) + 1e-6f);
     }
     CHECK(tandem_position(&g) == CROSS_NORMALF_END_POS);
 }
 
-/* Fills equal scalar draws, across block boundaries and from an unaligned start. */
+/* The scalar normal is the cos half of the pair, and a fill is the flattened pairs, across
+ * block boundaries and from an unaligned start. An odd n drops the last sin half but still
+ * consumes both uniforms. */
 static void test_normal_fills(void) {
     enum { N = 1000 };
-    tandem_rng a = tandem_seed(7, 9, 0), b, c;
-    double *want = malloc(N * sizeof *want), *got = malloc(N * sizeof *got);
-    float *want32 = malloc(N * sizeof *want32), *got32 = malloc(N * sizeof *got32);
-    size_t i;
+    double want[N], got[N];
+    float want32[N], got32[N];
+    size_t n, i;
 
-    tandem_next_u8(&a);
-    b = c = a;
-    for (i = 0; i < N; i++) want[i] = tandem_normal_f64(&a);
-    tandem_fill_normal_f64(&b, got, N);
-    CHECK(memcmp(want, got, N * sizeof *got) == 0);
-    CHECK(tandem_position(&b) == tandem_position(&a));
-    a = c;
-    for (i = 0; i < N; i++) want32[i] = tandem_normal_f32(&a);
-    tandem_fill_normal_f32(&c, got32, N);
-    CHECK(memcmp(want32, got32, N * sizeof *got32) == 0);
-    CHECK(tandem_position(&c) == tandem_position(&a));
-    free(want), free(got), free(want32), free(got32);
+    for (n = 0; n <= N; n += (n < 4 ? 1 : 249)) {
+        tandem_rng a = tandem_seed(7, 9, 0), b, c, d;
+        size_t pairs = n / 2 + n % 2;
+        tandem_next_u8(&a);
+        b = c = d = a;
+        for (i = 0; i < pairs; i++) {
+            double z[2];
+            tandem_normal2_f64(&a, z);
+            want[2 * i] = z[0];
+            if (2 * i + 1 < n) want[2 * i + 1] = z[1];
+        }
+        tandem_fill_normal_f64(&b, got, n);
+        CHECK(memcmp(want, got, n * sizeof *got) == 0);
+        CHECK(tandem_position(&b) == tandem_position(&a));
+
+        a = c;
+        for (i = 0; i < pairs; i++) {
+            float z[2];
+            tandem_normal2_f32(&a, z);
+            want32[2 * i] = z[0];
+            if (2 * i + 1 < n) want32[2 * i + 1] = z[1];
+        }
+        tandem_fill_normal_f32(&c, got32, n);
+        CHECK(memcmp(want32, got32, n * sizeof *got32) == 0);
+        CHECK(tandem_position(&c) == tandem_position(&a));
+
+        if (n) {
+            double z[2];
+            tandem_normal2_f64(&d, z);
+            CHECK(want[0] == z[0]);
+        }
+    }
+    {
+        tandem_rng a = tandem_seed(3, 4, 0), b = a;
+        double z[2];
+        float zf[2];
+        tandem_normal2_f64(&a, z);
+        CHECK(tandem_normal_f64(&b) == z[0] && tandem_position(&b) == tandem_position(&a));
+        a = b = tandem_seed(3, 4, 0);
+        tandem_normal2_f32(&a, zf);
+        CHECK(tandem_normal_f32(&b) == zf[0] && tandem_position(&b) == tandem_position(&a));
+    }
 }
 
 int main(void) {

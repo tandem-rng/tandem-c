@@ -20,9 +20,12 @@ produces the stream the specification defines, bit for bit, for every type it su
   tandem-cuda. The scalar bounded draws loop on rejection. The bounded fills use the parallel
   rule of tandem-cuda instead: element i maps draw i of the plain fill, which keeps the SIMD
   speed, and a rejected draw retries on a fallback generator, so a fill consumes exactly `len`
-  draws. The f32 normal draws two f32 uniforms and computes in float, so f32 normals agree
-  across ports to a few ulps because float libm functions differ. Uniforms are bit exact
-  and f64 normals agree to about 1e-12 relative.
+  draws. A Box-Muller step gives two normals: `tandem_normal2_f64` and `_f32` return both
+  (cos half first), `tandem_normal_*` returns the cos half, and `tandem_fill_normal_*` writes
+  the flattened pairs, so an odd count still consumes `2 * ceil(n / 2)` uniforms. The f32
+  normals draw two f32 uniforms and compute the radius in float, so they agree across ports to
+  a few ulps because float libm functions differ. Uniforms are bit exact and f64 normals agree
+  to about 1e-12 relative.
 - The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
   written with vector extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD`
   for the scalar version. After alignment every integer fill is one byte stream, so one
@@ -64,7 +67,8 @@ std::vector<float> xs = g.fill<float>(1 << 20);
 auto c = g.next<std::complex<double>>();           /* also uint128, char32_t, float16_bits */
 double u3 = g.at<double>(3);                       /* random access, no advance */
 uint32_t die = g.below<uint32_t>(6);               /* Lemire */
-double n = g.normal();                             /* Box-Muller */
+double n = g.normal();                             /* Box-Muller, cos half */
+auto pair = g.normal2();                           /* both halves of one step */
 g.set_position(0);
 tandem::rng worker = g.split(7);
 std::vector<tandem::rng> kids = g.fork(4);

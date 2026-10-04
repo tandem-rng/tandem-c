@@ -109,6 +109,9 @@ int main() {
         CHECK(h.below<std::uint64_t>(1ull << 40) == tandem_u64_below(&d, 1ull << 40));
         CHECK(h.normal() == tandem_normal_f64(&d));
         CHECK(h.normal<float>() == tandem_normal_f32(&d));
+        double z2[2];
+        tandem_normal2_f64(&d, z2);
+        CHECK((h.normal2() == std::array<double, 2>{z2[0], z2[1]}));
         CHECK(h.position() == tandem_position(&d));
 
         CHECK(h.set_position(100) && tandem_set_position(&d, 100));

@@ -111,6 +111,15 @@ public:
         else static_assert(sizeof(T) == 0, "tandem::rng::below: unsupported type");
     }
 
+    /* Both Box-Muller normals of one pair of uniforms, cos half first: tandem_normal2_f64 or f32. */
+    template <class T = double> std::array<T, 2> normal2() noexcept {
+        std::array<T, 2> z;
+        if constexpr (std::is_same_v<T, double>) tandem_normal2_f64(&s_, z.data());
+        else if constexpr (std::is_same_v<T, float>) tandem_normal2_f32(&s_, z.data());
+        else static_assert(sizeof(T) == 0, "tandem::rng::normal2: unsupported type");
+        return z;
+    }
+
     /* Standard normal by Box-Muller, float or double: the values of tandem_normal_f64 and f32. */
     template <class T = double> T normal() noexcept {
         if constexpr (std::is_same_v<T, double>) return tandem_normal_f64(&s_);
