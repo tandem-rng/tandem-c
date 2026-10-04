@@ -192,7 +192,13 @@ after a warm-up:
 | `tandem_fill_u64` | 20.2 | 12.3 |
 | `tandem_fill_f32` | 17.4 | 11.1 |
 | `tandem_fill_f64` | 17.5 | 11.1 |
+| `tandem_fill_normal_f64` | 5.0 | 4.3 |
+| `tandem_fill_normal_f32` | 5.5 | 4.6 |
 | `tandem_next_f64` chain, ns per draw | 1.40 | 1.77 |
+
+The normal rows count the bytes written. They run the vectorized Box-Muller loop described
+above after the float fill, so they do not depend on `TANDEM_NO_SIMD` except through the
+uniforms.
 
 The row loop keeps the eight lane states in registers and stores each row by a vector
 transpose, which is where the throughput comes from. Float fills map the words to floats in
