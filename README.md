@@ -45,6 +45,8 @@ tandem::rng worker = g.split(7);
 
 ## What it provides
 
+Packaging, design, test and speed detail: [docs/notes.md](docs/notes.md).
+
 - `tandem_rng`: a copyable value, 128-bit key, 64-bit bit position, chunk length `K`.
 - Every specification type: `bool`, 8 to 128-bit unsigned integers, `float`, `double`,
   binary16 bit patterns, Unicode scalars, complex pairs. Scalar draws and `tandem_fill_*`.
