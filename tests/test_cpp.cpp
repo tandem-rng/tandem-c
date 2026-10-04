@@ -1,9 +1,13 @@
 // The C++ wrapper agrees with the C API and drives <random>.
+#include <algorithm>
 #include <cstdio>
+#include <numeric>
+#include <sstream>
 #include <random>
 #include <vector>
 
 #include "../tandem.hpp"
+#include "../tandem123.h" // compiles as C++ too
 
 #if __cplusplus >= 202002L
 static_assert(std::uniform_random_bit_generator<tandem::rng>);
@@ -118,6 +122,50 @@ int main() {
         CHECK(h.next<std::uint64_t>() == tandem_next_u64(&d));
         CHECK(!h.set_position(std::uint64_t{1} << 63));
         CHECK(h.position() == tandem_position(&d));
+    }
+
+    {
+        // The standard engine requirements: seed, discard in constant time, stream round trip,
+        // and the standard algorithms and distributions, which must repeat across two runs.
+        tandem::rng a(11), b(11);
+        a.discard(1000000000000ull);
+        CHECK(a.position() == (std::uint64_t{1000000000000ull} * 64u));
+        a.seed(11);
+        CHECK(a == b);
+        a.seed();
+        CHECK(a == tandem::rng(0));
+
+        tandem::rng x(5);
+        x();
+        x.discard(3);
+        tandem::rng y(5);
+        for (int i = 0; i < 4; i++) y();
+        CHECK(x == y && x() == y());
+
+        std::stringstream ss;
+        ss << x;
+        tandem::rng restored;
+        ss >> restored;
+        CHECK(restored == x && restored() == x());
+
+        auto shuffled = [] {
+            tandem::rng r(3);
+            std::vector<int> v(100);
+            std::iota(v.begin(), v.end(), 0);
+            std::shuffle(v.begin(), v.end(), r);
+            return v;
+        };
+        std::vector<int> s1 = shuffled(), s2 = shuffled(), id(100);
+        std::iota(id.begin(), id.end(), 0);
+        CHECK(s1 == s2 && s1 != id);
+        CHECK(std::is_permutation(s1.begin(), s1.end(), id.begin()));
+
+        auto gauss = [] {
+            tandem::rng r(3);
+            std::normal_distribution<double> n;
+            return std::vector<double>{n(r), n(r), n(r)};
+        };
+        CHECK(gauss() == gauss());
     }
 
     CHECK(tandem::rng(7) == tandem::rng(7));

@@ -10,7 +10,9 @@
 #include <cstddef>
 #include <complex>
 #include <cstdint>
+#include <istream>
 #include <limits>
+#include <ostream>
 #include <type_traits>
 #include <vector>
 
@@ -59,9 +61,32 @@ public:
     /* std::uniform_random_bit_generator: 64 bits per call. */
     result_type operator()() noexcept { return tandem_next_u64(&s_); }
 
-    /* Skip z 64-bit draws. */
+    static constexpr result_type default_seed = 0;
+
+    /* Reseed as the constructor does. */
+    void seed(std::uint64_t seed_lo = default_seed, std::uint64_t seed_hi = 0,
+              std::uint32_t K = 0) noexcept {
+        s_ = tandem_seed(seed_lo, seed_hi, K);
+    }
+
+    /* Skip z 64-bit draws in constant time: the generator is counter based, so this is a move
+     * of the position. */
     void discard(unsigned long long z) noexcept {
-        s_.pos = ((s_.pos + 63u) & ~std::uint64_t{63}) + 64u * z;
+        set_position(((position() + 63u) & ~std::uint64_t{63}) + 64u * z);
+    }
+
+    /* The transport form as six decimal words: the key, the position, the chunk length. */
+    friend std::ostream &operator<<(std::ostream &os, const rng &g) {
+        key_type k = g.key();
+        return os << k[0] << ' ' << k[1] << ' ' << k[2] << ' ' << k[3] << ' ' << g.position() << ' '
+                  << g.chunk_length();
+    }
+    friend std::istream &operator>>(std::istream &is, rng &g) {
+        key_type k;
+        std::uint64_t pos;
+        std::uint32_t K;
+        if (is >> k[0] >> k[1] >> k[2] >> k[3] >> pos >> K) g = from_key(k, pos, K);
+        return is;
     }
 
     /* Draw one value of T: bool, the fixed-width unsigned integers (uint128 where the compiler
