@@ -13,6 +13,11 @@ mpich = "*"
 [feature.mpi.target.osx-arm64.dependencies]
 llvm-openmp = "*"
 
+# On Linux, MPICH runs over UCX, which can fail to open a network device on CI runners. The
+# example runs on one node, so shared memory is enough.
+[feature.mpi.target.linux-64.activation.env]
+UCX_TLS = "self,sm"
+
 [feature.mpi.tasks]
 check = "make check"
 
