@@ -1,9 +1,12 @@
 /* Functions beyond the specification's draws: positioning, bounded integers, normals. */
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../tandem.h"
 #include "cross_below.h"
+#include "cross_normal.h"
 
 static int failures;
 
@@ -82,10 +85,51 @@ static void test_below_degenerate(void) {
     CHECK(tandem_u64_below(&g, 0) == 0 && tandem_position(&g) == 128);
 }
 
+/* Box-Muller of tandem-cuda's normal(). log and cos may differ in the last place between
+ * libms, so values match to 1e-12 relative. The position pins two 64-bit draws per normal. */
+static void test_normal_cross(void) {
+    tandem_rng g = tandem_seed(42, 0, 0);
+    size_t i;
+    tandem_next_bool(&g);
+    for (i = 0; i < CROSS_NORMAL_COUNT; i++) {
+        double z = tandem_normal_f64(&g);
+        CHECK(fabs(z - CROSS_NORMAL[i]) <= 1e-12 * fabs(CROSS_NORMAL[i]));
+    }
+    CHECK(tandem_position(&g) == CROSS_NORMAL_END_POS);
+}
+
+/* Fills equal scalar draws, across block boundaries and from an unaligned start; the f32
+ * normal is the f64 normal rounded. */
+static void test_normal_fills(void) {
+    enum { N = 1000 };
+    tandem_rng a = tandem_seed(7, 9, 0), b, c;
+    double *want = malloc(N * sizeof *want), *got = malloc(N * sizeof *got);
+    float *got32 = malloc(N * sizeof *got32);
+    size_t i;
+
+    tandem_next_u8(&a);
+    b = c = a;
+    for (i = 0; i < N; i++) want[i] = tandem_normal_f64(&a);
+    tandem_fill_normal_f64(&b, got, N);
+    CHECK(memcmp(want, got, N * sizeof *got) == 0);
+    CHECK(tandem_position(&b) == tandem_position(&a));
+    tandem_fill_normal_f32(&c, got32, N);
+    for (i = 0; i < N; i++) CHECK(got32[i] == (float)want[i]);
+    CHECK(tandem_position(&c) == tandem_position(&a));
+    {
+        tandem_rng d = tandem_seed(7, 9, 0), e = d;
+        tandem_next_u8(&d), tandem_next_u8(&e);
+        CHECK(tandem_normal_f32(&d) == (float)tandem_normal_f64(&e));
+    }
+    free(want), free(got), free(got32);
+}
+
 int main(void) {
     test_set_position();
     test_below_cross();
     test_below_degenerate();
+    test_normal_cross();
+    test_normal_fills();
     if (failures) {
         printf("%d failures\n", failures);
         return 1;

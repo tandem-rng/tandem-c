@@ -71,6 +71,13 @@ void tandem_next_c64(tandem_rng *rng, double out[2]);
 uint32_t tandem_u32_below(tandem_rng *rng, uint32_t n);
 uint64_t tandem_u64_below(tandem_rng *rng, uint64_t n);
 
+/* Standard normal by Box-Muller from two tandem_next_f64 draws, u mapped to (0, 1]:
+ * sqrt(-2 ln u) cos(2 pi v). It matches Rng::normal of tandem-cuda and is not part of the
+ * specification. The f32 version rounds the same double, so it also consumes 128 bits. Link
+ * with -lm. */
+double tandem_normal_f64(tandem_rng *rng);
+float tandem_normal_f32(tandem_rng *rng);
+
 /* Fills: n aligned elements, the same values as n scalar draws. */
 void tandem_fill_bool(tandem_rng *rng, bool *out, size_t n);
 void tandem_fill_u8(tandem_rng *rng, uint8_t *out, size_t n);
@@ -89,6 +96,10 @@ void tandem_fill_c64(tandem_rng *rng, double *out, size_t n);
 /* len bounded draws, the same values as len calls of tandem_u32_below or tandem_u64_below. */
 void tandem_fill_u32_below(tandem_rng *rng, uint32_t *out, size_t len, uint32_t n);
 void tandem_fill_u64_below(tandem_rng *rng, uint64_t *out, size_t len, uint64_t n);
+
+/* n normals, the same values as n calls of tandem_normal_f64 or tandem_normal_f32. */
+void tandem_fill_normal_f64(tandem_rng *rng, double *out, size_t n);
+void tandem_fill_normal_f32(tandem_rng *rng, float *out, size_t n);
 
 /* Random access: element i of the fill that would start here, without advancing. */
 uint32_t tandem_at_u32(const tandem_rng *rng, uint64_t i);

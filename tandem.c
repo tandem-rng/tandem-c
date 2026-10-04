@@ -1,6 +1,7 @@
 /* Tandem8x32 reference implementation. See tandem.h and the specification. */
 #include "tandem.h"
 
+#include <math.h>
 #include <string.h>
 #if defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_neon.h>
@@ -585,6 +586,45 @@ void tandem_fill_u32_below(tandem_rng *rng, uint32_t *out, size_t len, uint32_t 
 
 void tandem_fill_u64_below(tandem_rng *rng, uint64_t *out, size_t len, uint64_t n) {
     for (size_t i = 0; i < len; i++) out[i] = tandem_u64_below(rng, n);
+}
+
+/* ---- Public: normals --------------------------------------------------------------------- */
+
+static inline double box_muller(double a, double b) {
+    return sqrt(-2.0 * log(1.0 - a)) * cos(6.283185307179586 * b);
+}
+
+double tandem_normal_f64(tandem_rng *rng) {
+    double a = tandem_next_f64(rng);
+    return box_muller(a, tandem_next_f64(rng));
+}
+
+float tandem_normal_f32(tandem_rng *rng) { return (float)tandem_normal_f64(rng); }
+
+/* The uniforms of a fill come from tandem_fill_f64 in blocks, which is the same stream as
+ * scalar draws because every draw is 64 bits and aligned. */
+#define NORMAL_BLOCK 256u
+
+void tandem_fill_normal_f64(tandem_rng *rng, double *out, size_t n) {
+    double u[2u * NORMAL_BLOCK];
+    while (n) {
+        size_t m = n < NORMAL_BLOCK ? n : NORMAL_BLOCK;
+        tandem_fill_f64(rng, u, 2u * m);
+        for (size_t i = 0; i < m; i++) out[i] = box_muller(u[2u * i], u[2u * i + 1u]);
+        out += m;
+        n -= m;
+    }
+}
+
+void tandem_fill_normal_f32(tandem_rng *rng, float *out, size_t n) {
+    double z[NORMAL_BLOCK];
+    while (n) {
+        size_t m = n < NORMAL_BLOCK ? n : NORMAL_BLOCK;
+        tandem_fill_normal_f64(rng, z, m);
+        for (size_t i = 0; i < m; i++) out[i] = (float)z[i];
+        out += m;
+        n -= m;
+    }
 }
 
 /* ---- Public: random access and derived generators --------------------------------------- */

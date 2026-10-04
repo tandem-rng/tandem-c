@@ -15,7 +15,9 @@ produces the stream the specification defines, bit for bit, for every type it su
   `double`, binary16 as bit patterns, Unicode scalars, and complex pairs. Signed integers are
   the unsigned draws reinterpreted. Random access without advancing. Split by index, fork at
   the current block, sub by purpose. Bounded integers `tandem_u32_below` and
-  `tandem_u64_below` (Lemire, the same values as tandem-cuda) go beyond the specification.
+  `tandem_u64_below` (Lemire) and normals `tandem_normal_f64` and `tandem_normal_f32`
+  (Box-Muller, which needs `-lm`) go beyond the specification and return the same values as
+  tandem-cuda. The f32 normal is the f64 normal rounded.
 - The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
   written with vector extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD`
   for the scalar version. After alignment every integer fill is one byte stream, so one
@@ -37,6 +39,9 @@ tandem_set_position(&rng, 0);                      /* rewind; false if the posit
 uint32_t die = tandem_u32_below(&rng, 6);          /* uniform on [0, 6), Lemire's method */
 uint64_t idx[100];
 tandem_fill_u64_below(&rng, idx, 100, 1000000000000u);
+double z = tandem_normal_f64(&rng);                /* Box-Muller; link with -lm */
+float zs[1000];
+tandem_fill_normal_f32(&rng, zs, 1000);
 ```
 
 Build with `make`, which produces `libtandem.a`, or compile `tandem.c` into your project.
@@ -66,7 +71,7 @@ generated from the spec repository's `vectors.json` by `tools/gen_vectors.py`, a
 when it is out of date. `tests/test_stream.c` compares long fills, scalar draws, and random
 access against reference stream dumps in `tests/data`, written by `tools/dump_streams.jl`.
 `tests/test_api.c` checks the functions that are not part of the specification's draws. The
-bounded integers are compared, values and stream position, with fixtures that
+bounded integers and normals are compared, values and stream position, with fixtures that
 `tools/gen_cross.cpp` computes from the shared core of
 [tandem-cuda](https://github.com/tandem-rng/tandem-cuda). `make cross` regenerates them.
 `tests/test_cpp.cpp` checks that the C++ wrapper agrees with the C API and runs `<random>`.
