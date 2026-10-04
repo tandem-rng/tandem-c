@@ -17,7 +17,12 @@ produces the stream the specification defines, bit for bit, for every type it su
   the current block, sub by purpose. Bounded integers `tandem_u32_below` and
   `tandem_u64_below` (Lemire) and normals `tandem_normal_f64` and `tandem_normal_f32`
   (Box-Muller, which needs `-lm`) go beyond the specification and return the same values as
-  tandem-cuda. The f32 normal draws two f32 uniforms and rounds the double result.
+  tandem-cuda. The scalar bounded draws loop on rejection. The bounded fills use the parallel
+  rule of tandem-cuda instead: element i maps draw i of the plain fill, which keeps the SIMD
+  speed, and a rejected draw retries on a fallback generator, so a fill consumes exactly `len`
+  draws. The f32 normal draws two f32 uniforms and computes in float, so f32 normals agree
+  across ports to a few ulps because float libm functions differ. Uniforms are bit exact
+  and f64 normals agree to about 1e-12 relative.
 - The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
   written with vector extensions and compiles to NEON or SSE/AVX. Define `TANDEM_NO_SIMD`
   for the scalar version. After alignment every integer fill is one byte stream, so one
@@ -76,9 +81,10 @@ generated from the spec repository's `vectors.json` by `tools/gen_vectors.py`, a
 when it is out of date. `tests/test_stream.c` compares long fills, scalar draws, and random
 access against reference stream dumps in `tests/data`, written by `tools/dump_streams.jl`.
 `tests/test_api.c` checks the functions that are not part of the specification's draws. The
-bounded integers and normals are compared, values and stream position, with fixtures that
-`tools/gen_cross.cpp` computes from the shared core of
-[tandem-cuda](https://github.com/tandem-rng/tandem-cuda). `make cross` regenerates them.
+bounded integers (scalar and fill) and normals are compared, values and stream position,
+with fixtures that `tools/gen_cross.cpp` computes from the shared core of
+[tandem-cuda](https://github.com/tandem-rng/tandem-cuda). f32 normals match within 8 ulps.
+`make cross` regenerates the fixtures.
 `tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`,
 `set_position` and the extra draw types, agrees with the C API and runs `<random>`. Compiled
 as C++20 it also checks `std::uniform_random_bit_generator`.

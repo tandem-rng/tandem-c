@@ -6,6 +6,7 @@
 
 #include "../tandem.h"
 #include "cross_below.h"
+#include "cross_fill_below.h"
 #include "cross_normal.h"
 
 static int failures;
@@ -51,30 +52,42 @@ static void test_set_position(void) {
 static void test_below_cross(void) {
     size_t c, i;
     for (c = 0; c < sizeof CROSS_U32 / sizeof CROSS_U32[0]; c++) {
-        tandem_rng g = tandem_seed(42, 0, 0), f;
+        tandem_rng g = tandem_seed(42, 0, 0);
         tandem_next_bool(&g);
-        f = g;
         for (i = 0; i < CROSS_COUNT; i++) CHECK(tandem_u32_below(&g, CROSS_U32[c].n) == CROSS_U32[c].want[i]);
         CHECK(tandem_position(&g) == CROSS_U32[c].end_pos);
-        {
-            uint32_t out[CROSS_COUNT];
-            tandem_fill_u32_below(&f, out, CROSS_COUNT, CROSS_U32[c].n);
-            CHECK(memcmp(out, CROSS_U32[c].want, sizeof out) == 0);
-            CHECK(tandem_position(&f) == CROSS_U32[c].end_pos);
-        }
     }
     for (c = 0; c < sizeof CROSS_U64 / sizeof CROSS_U64[0]; c++) {
-        tandem_rng g = tandem_seed(42, 0, 0), f;
+        tandem_rng g = tandem_seed(42, 0, 0);
         tandem_next_bool(&g);
-        f = g;
         for (i = 0; i < CROSS_COUNT; i++) CHECK(tandem_u64_below(&g, CROSS_U64[c].n) == CROSS_U64[c].want[i]);
         CHECK(tandem_position(&g) == CROSS_U64[c].end_pos);
-        {
-            uint64_t out[CROSS_COUNT];
-            tandem_fill_u64_below(&f, out, CROSS_COUNT, CROSS_U64[c].n);
-            CHECK(memcmp(out, CROSS_U64[c].want, sizeof out) == 0);
-            CHECK(tandem_position(&f) == CROSS_U64[c].end_pos);
-        }
+    }
+}
+
+/* The parallel fills of core.hpp, rejected draws included. The fills of 64 elements with the
+ * large ranges reject often, so the fallback generator is exercised. A fill without a
+ * rejection equals the scalar calls, which pins the plain path. */
+static void test_fill_below(void) {
+    size_t c, i, same = 0, total = 0;
+    for (c = 0; c < sizeof CROSS_FILL_U32 / sizeof CROSS_FILL_U32[0]; c++) {
+        tandem_rng g = tandem_seed(42, 0, 0), s;
+        uint32_t out[CROSS_COUNT];
+        tandem_next_bool(&g);
+        s = g;
+        tandem_fill_u32_below(&g, out, CROSS_COUNT, CROSS_FILL_U32[c].n);
+        CHECK(memcmp(out, CROSS_FILL_U32[c].want, sizeof out) == 0);
+        CHECK(tandem_position(&g) == CROSS_FILL_U32[c].end_pos);
+        for (i = 0; i < CROSS_COUNT; i++) same += out[i] == tandem_u32_below(&s, CROSS_FILL_U32[c].n), total++;
+    }
+    CHECK(same < total);
+    for (c = 0; c < sizeof CROSS_FILL_U64 / sizeof CROSS_FILL_U64[0]; c++) {
+        tandem_rng g = tandem_seed(42, 0, 0);
+        uint64_t out[CROSS_COUNT];
+        tandem_next_bool(&g);
+        tandem_fill_u64_below(&g, out, CROSS_COUNT, CROSS_FILL_U64[c].n);
+        CHECK(memcmp(out, CROSS_FILL_U64[c].want, sizeof out) == 0);
+        CHECK(tandem_position(&g) == CROSS_FILL_U64[c].end_pos);
     }
 }
 
@@ -97,13 +110,13 @@ static void test_normal_cross(void) {
     }
     CHECK(tandem_position(&g) == CROSS_NORMAL_END_POS);
 
-    /* core.hpp computes the f32 normal in float, this library in double, so they agree to a few
-     * float ulps, and in absolute terms near the zeros of cos. The position is exact. */
+    /* Float libm functions differ between platforms: 8 ulps and an absolute floor near the zeros
+     * of cos. The position is exact. */
     g = tandem_seed(42, 0, 0);
     tandem_next_bool(&g);
     for (i = 0; i < CROSS_NORMAL_COUNT; i++) {
         float z = tandem_normal_f32(&g);
-        CHECK(fabsf(z - CROSS_NORMALF[i]) <= 1e-5f * (1.0f + fabsf(CROSS_NORMALF[i])));
+        CHECK(fabsf(z - CROSS_NORMALF[i]) <= 8.0f * 0x1p-23f * fabsf(CROSS_NORMALF[i]) + 1e-6f);
     }
     CHECK(tandem_position(&g) == CROSS_NORMALF_END_POS);
 }
@@ -133,6 +146,7 @@ static void test_normal_fills(void) {
 int main(void) {
     test_set_position();
     test_below_cross();
+    test_fill_below();
     test_below_degenerate();
     test_normal_cross();
     test_normal_fills();
