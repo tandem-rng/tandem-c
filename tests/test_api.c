@@ -243,6 +243,19 @@ static void test_device_fixtures(void) {
         tandem_fill_u64_below(&g, out, 64, CROSS_BELOW64[c].range);
         CHECK(memcmp(out, CROSS_BELOW64[c].out, sizeof out) == 0);
     }
+    /* Unaligned starts, where the fallback index of element e is not e. */
+    for (c = 0; c < sizeof CROSS_BELOW32_AT / sizeof CROSS_BELOW32_AT[0]; c++) {
+        tandem_rng g = tandem_from_key(CROSS_FILL_KEY, CROSS_BELOW32_AT[c].start, 0);
+        uint32_t out[64];
+        tandem_fill_u32_below(&g, out, 64, CROSS_BELOW32_AT[c].range);
+        CHECK(memcmp(out, CROSS_BELOW32_AT[c].out, sizeof out) == 0);
+    }
+    for (c = 0; c < sizeof CROSS_BELOW64_AT / sizeof CROSS_BELOW64_AT[0]; c++) {
+        tandem_rng g = tandem_from_key(CROSS_FILL_KEY, CROSS_BELOW64_AT[c].start, 0);
+        uint64_t out[64];
+        tandem_fill_u64_below(&g, out, 64, CROSS_BELOW64_AT[c].range);
+        CHECK(memcmp(out, CROSS_BELOW64_AT[c].out, sizeof out) == 0);
+    }
     for (c = 0; c < sizeof CROSS_NORMAL64 / sizeof CROSS_NORMAL64[0]; c++) {
         tandem_rng g = tandem_from_key(CROSS_FILL_KEY, CROSS_NORMAL64[c].pos, 0);
         double out[64];
