@@ -20,12 +20,16 @@ tests/test_vectors: tests/test_vectors.c tests/vectors.h tandem.c tandem.h
 tests/test_stream: tests/test_stream.c tandem.c tandem.h
 	$(CC) $(CFLAGS) -o $@ tests/test_stream.c tandem.c
 
+tests/test_api: tests/test_api.c tandem.c tandem.h
+	$(CC) $(CFLAGS) -o $@ tests/test_api.c tandem.c
+
 tests/test_cpp: tests/test_cpp.cpp tandem.hpp tandem.o
 	$(CXX) $(CXXFLAGS) -o $@ tests/test_cpp.cpp tandem.o
 
-test: tests/test_vectors tests/test_stream tests/test_cpp
+test: tests/test_vectors tests/test_stream tests/test_api tests/test_cpp
 	./tests/test_vectors
 	./tests/test_stream tests/data
+	./tests/test_api
 	./tests/test_cpp
 
 tools/bench: tools/bench.c tandem.c tandem.h
@@ -43,4 +47,4 @@ vectors:
 	python3 tools/gen_vectors.py $(SPEC_VECTORS) > tests/vectors.h
 
 clean:
-	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_cpp tools/bench tools/bench_std
+	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_cpp tools/bench tools/bench_std

@@ -6,3 +6,4 @@ tests/test_stream
 tools/bench
 tools/bench_std
 tests/test_cpp
+tests/test_api

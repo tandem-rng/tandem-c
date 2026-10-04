@@ -439,6 +439,13 @@ void tandem_key(const tandem_rng *rng, uint32_t key[4]) { memcpy(key, rng->key, 
 uint64_t tandem_position(const tandem_rng *rng) { return rng->pos; }
 uint32_t tandem_chunk_length(const tandem_rng *rng) { return rng->K; }
 
+bool tandem_set_position(tandem_rng *rng, uint64_t pos) {
+    if (pos >> 63) return false;
+    rng->pos = pos;
+    rng->cached = 0u;
+    return true;
+}
+
 /* ---- Public: scalar draws --------------------------------------------------------------- */
 
 bool tandem_next_bool(tandem_rng *rng) { return next(rng, 1) != 0; }

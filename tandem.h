@@ -38,6 +38,9 @@ tandem_rng tandem_seed(uint64_t seed_lo, uint64_t seed_hi, uint32_t K);
 void tandem_key(const tandem_rng *rng, uint32_t key[4]);
 uint64_t tandem_position(const tandem_rng *rng);
 uint32_t tandem_chunk_length(const tandem_rng *rng);
+/* Move to bit position pos. Returns false and changes nothing when pos >= 2^63, the spec's
+ * limit for a start position. */
+bool tandem_set_position(tandem_rng *rng, uint64_t pos);
 
 /* 128-bit words as two 64-bit halves, little-endian. */
 typedef struct {

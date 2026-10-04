@@ -32,6 +32,7 @@ tandem_fill_u32(&rng, words, 1024);
 tandem_rng worker = tandem_split(&rng, 7);        /* by index, from the key alone */
 tandem_rng kids[4];
 tandem_fork(&rng, kids, 4);                        /* from the current block, parent moves on */
+tandem_set_position(&rng, 0);                      /* rewind; false if the position is >= 2^63 */
 ```
 
 Build with `make`, which produces `libtandem.a`, or compile `tandem.c` into your project.
@@ -60,6 +61,7 @@ make test
 generated from the spec repository's `vectors.json` by `tools/gen_vectors.py`, and CI fails
 when it is out of date. `tests/test_stream.c` compares long fills, scalar draws, and random
 access against reference stream dumps in `tests/data`, written by `tools/dump_streams.jl`.
+`tests/test_api.c` checks the functions that are not part of the specification's draws.
 `tests/test_cpp.cpp` checks that the C++ wrapper agrees with the C API and runs `<random>`.
 
 ## Speed
