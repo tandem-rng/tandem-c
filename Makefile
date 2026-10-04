@@ -1,7 +1,12 @@
-CC ?= cc
-CXX ?= c++
-CFLAGS ?= -std=c99 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
-CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wshadow
+# Clang is the primary compiler. make predefines CC as cc, so ?= would never apply.
+ifeq ($(origin CC),default)
+CC = clang
+endif
+ifeq ($(origin CXX),default)
+CXX = clang++
+endif
+CFLAGS ?= -std=c23 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+CXXFLAGS ?= -std=c++23 -O2 -Wall -Wextra -Wpedantic -Wshadow
 SPEC_VECTORS ?= ../tandem-spec/vectors.json
 LDLIBS ?= -lm
 CORE_INCLUDE ?= ../tandem-cuda/include

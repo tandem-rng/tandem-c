@@ -6,9 +6,12 @@ Reference C implementation of [Tandem8x32](https://github.com/tandem-rng/spec), 
 noncryptographic pseudorandom number generator built to be fast on CPUs and GPUs alike. It
 produces the stream the specification defines, bit for bit, for every type it supports.
 
-- C99, no dependencies, two files: `tandem.h` and `tandem.c`. `tandem.hpp` adds a C++17
-  value type that satisfies `std::uniform_random_bit_generator`, so it drives every
-  `<random>` distribution.
+- No dependencies besides libm, two files: `tandem.h` and `tandem.c`. `tandem.hpp` adds a
+  C++ value type that satisfies `std::uniform_random_bit_generator`, so it drives every
+  `<random>` distribution. The library needs C11 and C++17 and nothing newer, so projects
+  that vendor it can keep their own flags. `make` builds it as C23 and C++23 with clang, the
+  primary compiler. CI builds with the latest clang and gcc, and a separate job compiles with
+  strict `-std=c11 -pedantic-errors` and `-std=c++17` to keep the older standards honest.
 - A generator is its transport form (128-bit key, 64-bit bit position, chunk length `K`) plus
   a cache of the current 1024-bit row. Copy it by value.
 - Every type in the specification: `bool`, 8 to 128-bit unsigned integers, `float`,
@@ -57,7 +60,8 @@ float zs[1000];
 tandem_fill_normal_f32(&rng, zs, 1000);
 ```
 
-Build with `make`, which produces `libtandem.a`, or compile `tandem.c` into your project.
+Build with `make`, which uses clang and produces `libtandem.a`, or compile `tandem.c` into
+your project. Set `CC` and `CXX` for another compiler.
 
 From C++:
 
@@ -100,7 +104,8 @@ as C++20 it also checks `std::uniform_random_bit_generator`.
 
 ## Speed
 
-Apple M4, one thread, `make bench` (clang, `-O2`), minimum of seven runs of 2^24 elements
+Apple M4, one thread, `make bench` (clang, `-O2`; all figures here are clang figures unless
+they say gcc), minimum of seven runs of 2^24 elements
 after a warm-up:
 
 | | GiB/s | with `TANDEM_NO_SIMD` |

@@ -8,36 +8,77 @@ on:
 permissions:
   contents: read
 
+# Clang is the primary compiler, so its jobs come first. The gcc job is a compatibility check.
+# The library is vendored into other projects that compile it with their own flags, so the c11
+# job builds it as strict C11 and C++17 to prove that it needs nothing newer.
 jobs:
   test:
-    name: ${{ matrix.os }} / ${{ matrix.cc }}${{ matrix.sanitize && ' / sanitizers' || '' }}
+    name: ${{ matrix.os }} / ${{ matrix.cc }}${{ matrix.mode != 'default' && format(' / {0}', matrix.mode) || '' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-latest, cc: gcc, cxx: g++}
-          - {os: ubuntu-latest, cc: clang, cxx: clang++}
-          - {os: ubuntu-latest, cc: clang, cxx: clang++, sanitize: true}
-          - {os: macos-latest, cc: clang, cxx: clang++}
+          - {os: ubuntu-latest, cc: clang, cxx: clang++, latest: true, mode: default}
+          - {os: ubuntu-latest, cc: clang, cxx: clang++, latest: true, mode: sanitizers}
+          - {os: macos-latest, cc: clang, cxx: clang++, mode: default}
+          - {os: ubuntu-latest, cc: gcc, cxx: g++, latest: true, mode: default}
+          - {os: ubuntu-latest, cc: clang and gcc, cxx: clang++ and g++, mode: c11}
     steps:
       - uses: actions/checkout@v7
-      - name: Build and test
-        env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
+
+      - name: Install the latest clang or gcc
+        if: matrix.latest
         run: |
-          if [ "${{ matrix.sanitize }}" = "true" ]; then
-            san="-O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all"
-            export CFLAGS="-std=c99 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror $san"
-            export CXXFLAGS="-std=c++17 -Wall -Wextra -Wpedantic -Wshadow -Werror $san"
-            export LDFLAGS="$san"
+          if [ "${{ matrix.cc }}" = "clang" ]; then
+            wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+            sudo bash /tmp/llvm.sh
+            v=$(ls /usr/bin/clang-[0-9]* | sed 's|.*/clang-||' | sort -n | tail -1)
+            echo "CC=clang-$v" >> "$GITHUB_ENV"
+            echo "CXX=clang++-$v" >> "$GITHUB_ENV"
           else
-            export CFLAGS="-std=c99 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror"
-            export CXXFLAGS="-std=c++17 -O2 -Wall -Wextra -Wpedantic -Wshadow -Werror"
+            sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+            sudo apt-get update
+            v=$(apt-cache pkgnames gcc- | sed -n 's/^gcc-\([0-9]*\)$/\1/p' | sort -n | tail -1)
+            sudo apt-get install -y "gcc-$v" "g++-$v"
+            echo "CC=gcc-$v" >> "$GITHUB_ENV"
+            echo "CXX=g++-$v" >> "$GITHUB_ENV"
+          fi
+
+      - name: Select the compiler
+        if: ${{ !matrix.latest && matrix.mode != 'c11' }}
+        run: |
+          echo "CC=${{ matrix.cc }}" >> "$GITHUB_ENV"
+          echo "CXX=${{ matrix.cxx }}" >> "$GITHUB_ENV"
+
+      - name: Build and test
+        if: matrix.mode != 'c11'
+        run: |
+          $CC --version | head -1
+          if [ "${{ matrix.mode }}" = "sanitizers" ]; then
+            san="-O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all"
+            export CFLAGS="-std=c23 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror $san"
+            export CXXFLAGS="-std=c++23 -Wall -Wextra -Wpedantic -Wshadow -Werror $san"
+          else
+            export CFLAGS="-std=c23 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror"
+            export CXXFLAGS="-std=c++23 -O2 -Wall -Wextra -Wpedantic -Wshadow -Werror"
           fi
           make test
+
+      - name: Build and test as strict C11 and C++17
+        if: matrix.mode == 'c11'
+        run: |
+          for pair in "clang clang++" "gcc g++"; do
+            set -- $pair
+            make clean
+            CC=$1 CXX=$2 \
+              CFLAGS="-std=c11 -O2 -Wall -Wextra -pedantic-errors -Wconversion -Wshadow -Werror" \
+              CXXFLAGS="-std=c++17 -O2 -Wall -Wextra -pedantic-errors -Wshadow -Werror" \
+              make test
+          done
+
       - name: Vector header is current
+        if: matrix.mode == 'default'
         run: |
           git clone --depth 1 https://github.com/tandem-rng/spec ../tandem-spec
           make vectors
