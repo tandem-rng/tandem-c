@@ -3,6 +3,7 @@
 # tandem-c
 
 [![CI](https://github.com/tandem-rng/tandem-c/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tandem-rng/tandem-c/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-tandem--rng.github.io-7fb3ee.svg)](https://tandem-rng.github.io/tandem-c/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
 Reference C and C++ implementation of [Tandem8x32](https://github.com/tandem-rng/spec), a
@@ -32,4 +33,4 @@ See [API](docs/api.md) for the C++ `<random>` engine, MPI and OpenMP offload, an
 
 Portions of the code were generated with the assistance of LLMs.
 
-[Documentation](docs/index.md) · [Apache 2.0 license](LICENSE)
+[Documentation](https://tandem-rng.github.io/tandem-c/) · [Apache 2.0 license](LICENSE)
