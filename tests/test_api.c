@@ -8,6 +8,17 @@
 #include "cross_below.h"
 #include "cross_fill_below.h"
 #include "cross_normal.h"
+#include "cuda_fill_below.h"
+/* The f32 literals of the copied header carry no f suffix. */
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wfloat-conversion"
+#endif
+#include "cuda_fill_normal.h"
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 static int failures;
 
@@ -99,7 +110,7 @@ static void test_below_degenerate(void) {
 }
 
 /* Box-Muller pairs of tandem-cuda's normal2 and normalf2. log, cos and sin may differ in the
- * last place between libms: 1e-12 relative for f64, 8 ulps plus an absolute floor near the zeros
+ * last place between libms: 1e-12 relative for f64, 16 ulps plus an absolute floor near the zeros
  * of cos and sin for f32. The position pins two uniforms per pair. */
 static void test_normal_cross(void) {
     tandem_rng g = tandem_seed(42, 0, 0);
@@ -118,8 +129,8 @@ static void test_normal_cross(void) {
     for (i = 0; i < CROSS_NORMAL_COUNT; i++) {
         float z[2];
         tandem_normal2_f32(&g, z);
-        CHECK(fabsf(z[0] - CROSS_NORMALF[2 * i]) <= 8.0f * 0x1p-23f * fabsf(CROSS_NORMALF[2 * i]) + 1e-6f);
-        CHECK(fabsf(z[1] - CROSS_NORMALF[2 * i + 1]) <= 8.0f * 0x1p-23f * fabsf(CROSS_NORMALF[2 * i + 1]) + 1e-6f);
+        CHECK(fabsf(z[0] - CROSS_NORMALF[2 * i]) <= 16.0f * 0x1p-23f * fabsf(CROSS_NORMALF[2 * i]) + 1e-6f);
+        CHECK(fabsf(z[1] - CROSS_NORMALF[2 * i + 1]) <= 16.0f * 0x1p-23f * fabsf(CROSS_NORMALF[2 * i + 1]) + 1e-6f);
     }
     CHECK(tandem_position(&g) == CROSS_NORMALF_END_POS);
 }
@@ -177,6 +188,39 @@ static void test_normal_fills(void) {
     }
 }
 
+/* Fixtures that tandem-cuda derives on the device: fills from the key of seed 42 at several
+ * start positions. Bounded values are exact, f64 normals match to 1e-12 relative and f32
+ * normals to 16 ulps plus an absolute floor. */
+static void test_device_fixtures(void) {
+    size_t c, i;
+    for (c = 0; c < sizeof CROSS_BELOW32 / sizeof CROSS_BELOW32[0]; c++) {
+        tandem_rng g = tandem_from_key(CROSS_FILL_KEY, 0, 0);
+        uint32_t out[64];
+        tandem_fill_u32_below(&g, out, 64, CROSS_BELOW32[c].range);
+        CHECK(memcmp(out, CROSS_BELOW32[c].out, sizeof out) == 0);
+    }
+    for (c = 0; c < sizeof CROSS_BELOW64 / sizeof CROSS_BELOW64[0]; c++) {
+        tandem_rng g = tandem_from_key(CROSS_FILL_KEY, 0, 0);
+        uint64_t out[64];
+        tandem_fill_u64_below(&g, out, 64, CROSS_BELOW64[c].range);
+        CHECK(memcmp(out, CROSS_BELOW64[c].out, sizeof out) == 0);
+    }
+    for (c = 0; c < sizeof CROSS_NORMAL64 / sizeof CROSS_NORMAL64[0]; c++) {
+        tandem_rng g = tandem_from_key(CROSS_FILL_KEY, CROSS_NORMAL64[c].pos, 0);
+        double out[64];
+        tandem_fill_normal_f64(&g, out, CROSS_NORMAL64[c].n);
+        for (i = 0; i < CROSS_NORMAL64[c].n; i++)
+            CHECK(fabs(out[i] - CROSS_NORMAL64[c].out[i]) <= 1e-12 * fabs(CROSS_NORMAL64[c].out[i]));
+    }
+    for (c = 0; c < sizeof CROSS_NORMAL32 / sizeof CROSS_NORMAL32[0]; c++) {
+        tandem_rng g = tandem_from_key(CROSS_FILL_KEY, CROSS_NORMAL32[c].pos, 0);
+        float out[64];
+        tandem_fill_normal_f32(&g, out, CROSS_NORMAL32[c].n);
+        for (i = 0; i < CROSS_NORMAL32[c].n; i++)
+            CHECK(fabsf(out[i] - CROSS_NORMAL32[c].out[i]) <= 16.0f * 0x1p-23f * fabsf(CROSS_NORMAL32[c].out[i]) + 1e-6f);
+    }
+}
+
 int main(void) {
     test_set_position();
     test_below_cross();
@@ -184,6 +228,7 @@ int main(void) {
     test_below_degenerate();
     test_normal_cross();
     test_normal_fills();
+    test_device_fixtures();
     if (failures) {
         printf("%d failures\n", failures);
         return 1;

@@ -22,7 +22,7 @@ tests/test_vectors: tests/test_vectors.c tests/vectors.h tandem.c tandem.h
 tests/test_stream: tests/test_stream.c tandem.c tandem.h
 	$(CC) $(CFLAGS) -o $@ tests/test_stream.c tandem.c $(LDLIBS)
 
-tests/test_api: tests/test_api.c tests/cross_below.h tests/cross_fill_below.h tests/cross_normal.h tandem.c tandem.h
+tests/test_api: tests/test_api.c tests/cross_below.h tests/cross_fill_below.h tests/cross_normal.h tests/cuda_fill_below.h tests/cuda_fill_normal.h tandem.c tandem.h
 	$(CC) $(CFLAGS) -o $@ tests/test_api.c tandem.c $(LDLIBS)
 
 tests/test_cpp: tests/test_cpp.cpp tandem.hpp tandem.o
@@ -56,6 +56,8 @@ cross: tools/gen_cross
 	./tools/gen_cross below > tests/cross_below.h
 	./tools/gen_cross fill_below > tests/cross_fill_below.h
 	./tools/gen_cross normal > tests/cross_normal.h
+	cp $(CORE_INCLUDE)/../tests/cross_fill_below.h tests/cuda_fill_below.h
+	cp $(CORE_INCLUDE)/../tests/cross_fill_normal.h tests/cuda_fill_normal.h
 
 clean:
 	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_cpp tools/bench tools/bench_std tools/gen_cross

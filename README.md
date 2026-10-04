@@ -87,7 +87,7 @@ access against reference stream dumps in `tests/data`, written by `tools/dump_st
 `tests/test_api.c` checks the functions that are not part of the specification's draws. The
 bounded integers (scalar and fill) and normals are compared, values and stream position,
 with fixtures that `tools/gen_cross.cpp` computes from the shared core of
-[tandem-cuda](https://github.com/tandem-rng/tandem-cuda). f32 normals match within 8 ulps.
+[tandem-cuda](https://github.com/tandem-rng/tandem-cuda). f32 normals match within 16 ulps. The device-derived fill fixtures of tandem-cuda are copied to `tests/cuda_fill_*.h`.
 `make cross` regenerates the fixtures.
 `tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`,
 `set_position` and the extra draw types, agrees with the C API and runs `<random>`. Compiled
