@@ -9,3 +9,4 @@ tests/test_cpp
 tests/test_api
 tools/gen_cross
 tools/normal_accuracy
+tests/test_r123

@@ -12,6 +12,8 @@ produces the stream the specification defines, bit for bit, for every type it su
   that vendor it can keep their own flags. `make` builds it as C23 and C++23 with clang, the
   primary compiler. CI builds with the latest clang and gcc, and a separate job compiles with
   strict `-std=c11 -pedantic-errors` and `-std=c++17` to keep the older standards honest.
+- `tandem::rng` is a C++ random number engine: it has `seed`, `discard` in constant time,
+  `==`, and stream operators, so `std::shuffle` and every `<random>` distribution take it.
 - A generator is its transport form (128-bit key, 64-bit bit position, chunk length `K`) plus
   a cache of the current 1024-bit row. Copy it by value.
 - Every type in the specification: `bool`, 8 to 128-bit unsigned integers, `float`,
@@ -83,6 +85,29 @@ tandem::rng worker = g.split(7);
 std::vector<tandem::rng> kids = g.fork(4);
 ```
 
+## Counter-based interface
+
+`tandem123.h` is a header-only function of a counter and a key in the shape of the
+[Random123](https://github.com/DEShawResearch/random123) interface, for C, C++, CUDA and HIP
+device code (`TANDEM_CUDA_DEVICE` marks the functions `__host__ __device__`):
+
+```c
+#include "tandem123.h"
+
+tandem4x32_key_t key = tandem4x32_key_from_seed(42, 0);   /* or the four key words directly */
+tandem4x32_ctr_t ctr = {{block, 0, 0, 0}};                 /* see the mapping below */
+tandem4x32_ctr_t out = tandem4x32(ctr, key);               /* four 32-bit words */
+```
+
+It differs from `philox4x32` in that the key has four words, not two, because Tandem's key is
+128 bits, and the counter is not a free space. `ctr.v[0] + 2^32 ctr.v[1]` is the 128-bit
+block, which is stream position `128 block`. `ctr.v[2]` is the chunk length `K`, a power of two
+up to 65536, and 0 means 32. `ctr.v[3]` is reserved. The result is the specification's block at
+that position: the words `tandem_fill_u32` writes as elements `4 block` to `4 block + 3` for a
+generator with that key and `K` at position 0. The specification limits positions to 2^63 bits,
+so `ctr.v[1]` stays below 2^24. `tests/test_r123.c` checks this against `tandem_fill_u32`,
+`tandem_block`, and the reference stream dumps.
+
 ## Tests
 
 ```sh
@@ -98,6 +123,7 @@ bounded integers (scalar and fill) and normals are compared, values and stream p
 with fixtures that `tools/gen_cross.cpp` computes from the shared core of
 [tandem-cuda](https://github.com/tandem-rng/tandem-cuda). f32 normals match within 16 ulps. The device-derived fill fixtures of tandem-cuda are copied to `tests/cuda_fill_*.h`.
 `make cross` regenerates the fixtures.
+`tests/test_r123.c` checks `tandem123.h` against the fills and the dumps.
 `tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`,
 `set_position` and the extra draw types, agrees with the C API and runs `<random>`. Compiled
 as C++20 it also checks `std::uniform_random_bit_generator`.
