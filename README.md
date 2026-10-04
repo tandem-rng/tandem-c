@@ -193,19 +193,27 @@ as C++20 it also checks `std::uniform_random_bit_generator`.
 
 ## Speed
 
-Apple M4, one thread, `make bench` (clang, `-O2`; all figures here are clang figures unless
-they say gcc), minimum of seven runs of 2^24 elements
-after a warm-up:
+Apple M4 and AMD EPYC 7702P (Zen 2), one thread, `make bench` (clang, `-O2`; all figures
+here are clang figures unless they say gcc), minimum of seven runs of 2^24 elements after a
+warm-up, in GiB/s. The EPYC build is clang 20 at plain `-O2` with no `-m` flags, so it runs
+the AVX2 copy picked at run time:
 
-| | GiB/s | with `TANDEM_NO_SIMD` |
-|---|---|---|
-| `tandem_fill_u32` | 20.4 | 12.3 |
-| `tandem_fill_u64` | 20.2 | 12.3 |
-| `tandem_fill_f32` | 17.4 | 11.1 |
-| `tandem_fill_f64` | 17.5 | 11.1 |
-| `tandem_fill_normal_f64` | 5.0 | 4.3 |
-| `tandem_fill_normal_f32` | 5.5 | 4.6 |
-| `tandem_next_f64` chain, ns per draw | 1.40 | 1.77 |
+| | M4 | M4 with `TANDEM_NO_SIMD` | EPYC 7702P |
+|---|---|---|---|
+| `tandem_fill_u32` | 20.4 | 12.3 | 8.4 |
+| `tandem_fill_u64` | 20.2 | 12.3 | 8.7 |
+| `tandem_fill_f32` | 17.4 | 11.1 | 7.9 |
+| `tandem_fill_f64` | 17.5 | 11.1 | 7.0 |
+| `tandem_fill_normal_f64` | 5.0 | 4.3 | 2.4 |
+| `tandem_fill_normal_f32` | 5.5 | 4.6 | 3.3 |
+| `tandem_next_f64` chain, ns per draw | 1.40 | 1.77 | 4.05 |
+
+On the EPYC the base copy, which `TANDEM_NO_AVX2` selects, reaches 6.2 GiB/s for
+`tandem_fill_u32` and 0.24 for `tandem_fill_normal_f64`, where `fma` is a library call. GCC
+12 at `-O2` reaches 9.1 GiB/s for `tandem_fill_u32` but only 0.83 for
+`tandem_fill_normal_f64`. GCC honours `-fno-math-errno` only on the command line, not as a
+function attribute, so `sqrt` keeps its errno branch and the normal loop stays scalar, with
+hardware fused multiply-adds.
 
 The normal rows count the bytes written. They run the vectorized Box-Muller loop described
 above after the float fill, so they do not depend on `TANDEM_NO_SIMD` except through the
