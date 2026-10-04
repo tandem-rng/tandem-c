@@ -54,7 +54,7 @@ Packaging, design, test and speed detail: [docs/notes.md](docs/notes.md).
 - Bounded integers `tandem_u32_below`, `tandem_u64_below` and `tandem_fill_u32_below`,
   `tandem_fill_u64_below`. A fill cut anywhere equals the whole fill.
 - Normals `tandem_normal_f64`, `tandem_normal_f32`, `tandem_normal2_*`, `tandem_fill_normal_*`.
-  The f64 and f32 normals match the device core of tandem-cuda to 1e-12 relative and a few ulps.
+  Bit exact with tandem-cuda on host and device, and with every port that copies the polynomials.
 - Exponentials `tandem_exponential_*` and `tandem_fill_exponential_*`, bit exact on every
   compiler, target and device.
 - `tandem::rng` in `tandem.hpp`: a `std::uniform_random_bit_generator` with `seed`,
