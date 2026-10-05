@@ -46,6 +46,9 @@ int main() {
     std::mt19937_64 mt64(42);
     std::uniform_real_distribution<float> uf(0.0f, 1.0f);
     std::uniform_real_distribution<double> ud(0.0, 1.0);
+    // The chain has its own generator: sharing mt64 with the other loops halves its speed.
+    std::mt19937_64 mtc(42);
+    std::uniform_real_distribution<double> udc(0.0, 1.0);
 
     for (double t0 = now(); now() - t0 < 0.5;) rng.fill(u32.data(), n);
 
@@ -91,6 +94,11 @@ int main() {
     });
     bench("mt19937_64, generate_canonical<double, 53>", n * 8, [&] {
         for (std::size_t i = 0; i < n; i++) f64[i] = std::generate_canonical<double, 53>(mt64);
+    });
+    bench("mt19937_64, uniform_real_distribution<double> chain", n * 8, [&] {
+        double acc = 0;
+        for (std::size_t i = 0; i < n; i++) acc += udc(mtc);
+        sink = acc;
     });
     (void)sink;
     return 0;

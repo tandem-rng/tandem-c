@@ -77,6 +77,23 @@ static void fill_f64(philox_rng *g, double *out, size_t n) {
     KEEP(out);
 }
 
+/* A scalar stream: one block feeds two f64 draws. */
+typedef struct {
+    philox_rng g;
+    philox4x32_ctr_t buf;
+    int used;
+} philox_stream;
+
+static inline double next_f64(philox_stream *s) {
+    if (s->used == 4) {
+        s->buf = block(&s->g);
+        s->used = 0;
+    }
+    uint64_t w = s->buf.v[s->used] | (uint64_t)s->buf.v[s->used + 1] << 32;
+    s->used += 2;
+    return (double)(w >> 11) * 0x1p-53;
+}
+
 int main(void) {
     size_t n = (size_t)1 << 24;
     uint32_t *u32 = malloc(n * sizeof *u32);
@@ -95,6 +112,14 @@ int main(void) {
     BENCH("philox fill_u64", n * 8, fill_u64(&g, u64, n));
     BENCH("philox fill_f32", n * 4, fill_f32(&g, f32, n));
     BENCH("philox fill_f64", n * 8, fill_f64(&g, f64, n));
+    philox_stream s = {g, {{0, 0, 0, 0}}, 4};
+    volatile double sink = 0;
+    BENCH("philox chain next_f64", n * 8, {
+        double acc = 0;
+        for (size_t i = 0; i < n; i++) acc += next_f64(&s);
+        sink = acc;
+    });
+    (void)sink;
     free(u32);
     free(u64);
     free(f64);
