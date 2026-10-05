@@ -16,3 +16,4 @@ tests/test_normal_bits
 tools/dump_normals
 tests/test_exponential_bits
 tools/dump_exponentials
+tools/bench_philox

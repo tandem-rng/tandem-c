@@ -1,2 +1,5 @@
 TandemRNG.jl
 Copyright 2026 Jessica Cox <jmcox@posteo.de>
+
+tools/random123 holds headers of Random123 1.14.0 for the Philox benchmark only.
+Copyright 2010-2012, D. E. Shaw Research. BSD 3-Clause license, see tools/random123/LICENSE.

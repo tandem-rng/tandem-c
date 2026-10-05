@@ -93,9 +93,14 @@ tools/bench_std: tools/bench_std.cpp tandem.hpp tandem.o
 tools/normal_accuracy: tools/normal_accuracy.c tandem.c tandem.h tandem_normal_tables.h
 	$(CC) $(CFLAGS) -o $@ tools/normal_accuracy.c tandem.c $(LDLIBS)
 
-bench: tools/bench tools/bench_std
+# Random123 sits on the system include path so its own warnings stay quiet.
+tools/bench_philox: tools/bench_philox.c
+	$(CC) $(CFLAGS) -isystem tools/random123 -o $@ tools/bench_philox.c $(LDLIBS)
+
+bench: tools/bench tools/bench_std tools/bench_philox
 	./tools/bench
 	./tools/bench_std
+	./tools/bench_philox
 
 # Regenerate the vector header from a checkout of https://github.com/tandem-rng/spec.
 vectors:
@@ -129,4 +134,4 @@ install: libtandem.a
 	    -e 's|@VERSION@|$(VERSION)|' packaging/tandem.pc.in > $(DESTDIR)$(LIBDIR)/pkgconfig/tandem.pc
 
 clean:
-	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_exponential_bits tests/test_cpp tests/test_normal_stats tools/bench tools/bench_std tools/gen_cross tools/normal_accuracy tests/test_target tools/bench_target
+	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_exponential_bits tests/test_cpp tests/test_normal_stats tools/bench tools/bench_std tools/bench_philox tools/gen_cross tools/normal_accuracy tests/test_target tools/bench_target
