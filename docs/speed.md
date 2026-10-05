@@ -1,23 +1,31 @@
 # Speed
 
-`make bench` produces the CPU figures and `make bench-target` the GPU figures.
+`make bench` produces the CPU figures, Philox included, and `make bench-target` the GPU figures.
 
 ## CPU
 
 Apple M4 and AMD EPYC 7702P, one thread, `make bench`, clang `-O2`, minimum of seven runs of
-2^24 elements, in GiB/s.
+2^24 elements, in GiB/s. The Philox and mt19937 columns run on the M4 and give the median of
+three passes.
 
-| | M4 | M4 with `TANDEM_NO_SIMD` | EPYC 7702P |
-|---|---|---|---|
-| `tandem_fill_u32` | 20.4 | 12.3 | 8.4 |
-| `tandem_fill_u64` | 20.2 | 12.3 | 8.7 |
-| `tandem_fill_f32` | 17.4 | 11.1 | 7.9 |
-| `tandem_fill_f64` | 17.5 | 11.1 | 7.0 |
-| `tandem_fill_normal_f64` | 7.7 | 5.9 | 3.6 |
-| `tandem_fill_normal_f32` | 5.5 | 4.6 | 3.3 |
-| `tandem_fill_exponential_f64` | 6.1 | 5.1 | 3.4 |
-| `tandem_fill_exponential_f32` | 6.7 | 5.5 | 4.5 |
-| `tandem_next_f64` chain, ns per draw | 1.40 | 1.77 | 4.05 |
+| | M4 | M4 with `TANDEM_NO_SIMD` | EPYC 7702P | Philox4x32-10 | mt19937 |
+|---|---|---|---|---|---|
+| `tandem_fill_u32` | 20.4 | 12.3 | 8.4 | 2.5 | 2.8 |
+| `tandem_fill_u64` | 20.2 | 12.3 | 8.7 | 2.4 | 5.0 |
+| `tandem_fill_f32` | 17.4 | 11.1 | 7.9 | 2.4 | 1.4 |
+| `tandem_fill_f64` | 17.5 | 11.1 | 7.0 | 2.4 | 2.8 |
+| `tandem_fill_normal_f64` | 7.7 | 5.9 | 3.6 | - | - |
+| `tandem_fill_normal_f32` | 5.5 | 4.6 | 3.3 | - | - |
+| `tandem_fill_exponential_f64` | 6.1 | 5.1 | 3.4 | - | - |
+| `tandem_fill_exponential_f32` | 6.7 | 5.5 | 4.5 | - | - |
+| `tandem_next_f64` chain, ns per draw | 1.40 | 1.77 | 4.05 | - | - |
+
+The Philox column is `tools/bench_philox.c`: Random123 1.14.0 `philox4x32` with 10 rounds,
+one block per call, written to the buffer with the bit-to-float maps of `tandem.c`. Clang does
+not vectorize its 32x32-bit products, so it runs scalar. In the same passes `tandem_fill_u32`
+ran at 19.1 GiB/s and `tandem_fill_f64` at 16.4. The mt19937 column is `std::mt19937` for u32
+and f32 and `std::mt19937_64` for u64 and f64, with `std::uniform_real_distribution` for the
+floats, from `tools/bench_std.cpp`.
 
 On the EPYC the base copy, which `TANDEM_NO_AVX2` selects, reaches 6.2 GiB/s for
 `tandem_fill_u32` and 2.9 for `tandem_fill_normal_f64`, whose library `fma` calls stay in the
