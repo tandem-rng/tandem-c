@@ -10,15 +10,15 @@ give the median of three passes. The EPYC column comes from an earlier session.
 
 | | M4 | M4 with `TANDEM_NO_SIMD` | EPYC 7702P | Philox4x32-10, M4 | mt19937, M4 |
 |---|---|---|---|---|---|
-| `tandem_fill_u32` | 18.6 | 11.7 | 8.4 | 2.4 | 2.7 |
-| `tandem_fill_u64` | 18.6 | 11.5 | 8.7 | 2.4 | 4.8 |
-| `tandem_fill_f32` | 16.2 | 10.7 | 7.9 | 2.3 | 1.4 |
-| `tandem_fill_f64` | 16.1 | 10.5 | 7.0 | 2.3 | 2.7 |
-| `tandem_fill_normal_f64` | 7.5 | 5.7 | 3.6 | - | - |
+| `tandem_fill_u32` | 19.1 | 11.5 | 8.4 | 2.4 | 2.7 |
+| `tandem_fill_u64` | 19.1 | 11.6 | 8.7 | 2.4 | 4.9 |
+| `tandem_fill_f32` | 16.4 | 10.7 | 7.9 | 2.3 | 1.4 |
+| `tandem_fill_f64` | 16.3 | 10.5 | 7.0 | 2.3 | 2.8 |
+| `tandem_fill_normal_f64` | 7.6 | 5.8 | 3.6 | - | - |
 | `tandem_fill_normal_f32` | 5.4 | 4.6 | 3.3 | - | - |
 | `tandem_fill_exponential_f64` | 6.0 | 4.9 | 3.4 | - | - |
-| `tandem_fill_exponential_f32` | 6.5 | 5.4 | 4.5 | - | - |
-| `tandem_next_f64` chain, ns per draw | 1.46 | 1.85 | 4.05 | - | - |
+| `tandem_fill_exponential_f32` | 6.6 | 5.4 | 4.5 | - | - |
+| `tandem_next_f64` chain, ns per draw | 1.46 | 1.83 | 4.05 | - | - |
 
 The Philox column is `tools/bench_philox.c`: Random123 1.14.0 `philox4x32` with 10 rounds,
 one block per call, written to the buffer with the bit-to-float maps of `tandem.c`. Clang does
@@ -68,17 +68,17 @@ value per call.
 
 | | GiB/s |
 |---|---|
-| `tandem::rng::fill<uint32_t>` | 17.2 |
-| `tandem::rng::fill<uint64_t>` | 18.5 |
-| `tandem::rng::fill<float>` | 16.0 |
-| `tandem::rng::fill<double>` | 16.2 |
-| `tandem::rng::next<double>` chain | 5.0 |
-| `std::uniform_real_distribution<double>` on `tandem::rng` | 5.0 |
+| `tandem::rng::fill<uint32_t>` | 19.0 |
+| `tandem::rng::fill<uint64_t>` | 19.0 |
+| `tandem::rng::fill<float>` | 16.5 |
+| `tandem::rng::fill<double>` | 16.3 |
+| `tandem::rng::next<double>` chain | 5.1 |
+| `std::uniform_real_distribution<double>` on `tandem::rng` | 5.1 |
 | `std::mt19937`, `uint32_t` | 2.7 |
-| `std::mt19937_64`, `uint64_t` | 4.8 |
-| `std::mt19937_64` with `std::generate_canonical<double, 53>` | 4.8 |
+| `std::mt19937_64`, `uint64_t` | 4.9 |
+| `std::mt19937_64` with `std::generate_canonical<double, 53>` | 5.0 |
 | `arc4random_buf` | 4.4 |
 | `rand()`, 31 bits per call into `uint32_t` | 0.9 |
 | `random()`, 31 bits per call into `uint32_t` | 2.4 |
 | `std::mt19937` with `std::uniform_real_distribution<float>` | 1.4 |
-| `std::mt19937_64` with `std::uniform_real_distribution<double>` | 2.7 |
+| `std::mt19937_64` with `std::uniform_real_distribution<double>` | 2.8 |
