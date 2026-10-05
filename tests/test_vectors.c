@@ -115,6 +115,32 @@ int main(void) {
                       tandem_at_u32(&rng, VEC_SEED_U32[i].index), VEC_SEED_U32[i].value);
     }
 
+    /* Weighted choice, Appendix C: the table and the indices of a fill and of scalar draws. */
+    for (size_t c = 0; c < LEN(VEC_CHOICE); c++) {
+        enum { N = LEN(VEC_CHOICE[0].indices) };
+        size_t m = VEC_CHOICE[c].m;
+        uint64_t cut[16];
+        uint32_t alias[16], fill[N];
+        tandem_choice_table t;
+        tandem_rng rng = tandem_from_key(VEC_KEY, 0, VEC_K), scalar = rng;
+        if (m > LEN(cut) || !tandem_choice_build(&t, VEC_CHOICE[c].w, m, cut, alias)) {
+            failures++;
+            printf("FAIL choice %zu: no table\n", c);
+            continue;
+        }
+        check_u64("choice capacity", c, t.capacity, VEC_CHOICE[c].capacity);
+        for (size_t j = 0; j < m; j++) {
+            check_u64("choice cut", j, cut[j], VEC_CHOICE[c].cut[j]);
+            check_u64("choice alias", j, alias[j], VEC_CHOICE[c].alias[j]);
+        }
+        tandem_fill_choice(&rng, fill, N, &t);
+        for (size_t i = 0; i < N; i++) {
+            check_u64("choice fill", i, fill[i], VEC_CHOICE[c].indices[i]);
+            check_u64("choice scalar", i, tandem_choice(&scalar, &t), VEC_CHOICE[c].indices[i]);
+        }
+        check_u64("choice position", c, tandem_position(&rng), 64u * N);
+    }
+
     if (failures) {
         printf("%d failures\n", failures);
         return 1;

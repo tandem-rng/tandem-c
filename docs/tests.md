@@ -68,6 +68,13 @@ This library is the reference of the f64 normals. `tools/gen_cross.cpp` writes t
 draw at element 20. Ports check against this file, whose SHA-256 is
 `3cd7c8f9178711255718288eb712eaccb33a1726d2a185f412f13590398ad3ac`.
 
+This library is also the reference of weighted choice, Appendix C. `tests/cross_choice.h` holds
+fills of 64 indices from six weight tables, zero, subnormal and near-overflow weights and 100
+weights among them, from the key of seed 42 at bits 0, 1 and 12345. Its SHA-256 is
+`73c0badade569b913eb01a2883ae4ae995e90f5b04e8bb7adaa3f42a957eb0bc`. The spec's choice vectors,
+which `tests/test_vectors.c` checks, were computed apart from this library from the spec text and
+the stream dump. `tests/test_api.c` runs a chi-square test on 10^7 indices.
+
 `tools/dump_normals.c` writes the bytes that `tests/test_normal_bits.c` hashes, whose SHA-256
 is `700ec4d2f4d6b82aaa56c6eff18a4e5919585fdbd093988773383d580ea610d1`.
 `tools/dump_exponentials.c` writes the bytes that `tests/test_exponential_bits.c` hashes, whose

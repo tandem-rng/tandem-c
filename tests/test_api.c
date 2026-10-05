@@ -8,6 +8,7 @@
 #include "../tandem.h"
 #include "../tandem_normal_tables.h"
 #include "cross_below.h"
+#include "cross_choice.h"
 #include "cross_exponential.h"
 #include "cross_fill_below.h"
 #include "cross_normal.h"
@@ -458,6 +459,84 @@ static void test_exponential_stats(void) {
     free(f);
 }
 
+/* Weighted choice fills of the published fixture, from aligned and unaligned starts, and the
+ * scalar draws, which must equal them. The positions pin one 64-bit draw per element. */
+static void test_choice_cross(void) {
+    size_t c, i;
+    for (c = 0; c < sizeof CROSS_CHOICE / sizeof CROSS_CHOICE[0]; c++) {
+        size_t m = CROSS_CHOICE[c].m;
+        uint64_t *cut = malloc(m * sizeof *cut);
+        uint32_t *alias = malloc(m * sizeof *alias), got[CROSS_CHOICE_COUNT];
+        tandem_choice_table t;
+        tandem_rng a = tandem_seed(42, 0, 0), b;
+        CHECK(tandem_choice_build(&t, CROSS_CHOICE[c].weights, m, cut, alias));
+        CHECK(t.capacity == CROSS_CHOICE[c].capacity);
+        tandem_set_position(&a, CROSS_CHOICE[c].start);
+        b = a;
+        tandem_fill_choice(&a, got, CROSS_CHOICE_COUNT, &t);
+        CHECK(memcmp(got, CROSS_CHOICE[c].want, sizeof got) == 0);
+        CHECK(tandem_position(&a) == CROSS_CHOICE[c].end_pos);
+        for (i = 0; i < CROSS_CHOICE_COUNT; i++) CHECK(tandem_choice(&b, &t) == CROSS_CHOICE[c].want[i]);
+        CHECK(tandem_position(&b) == CROSS_CHOICE[c].end_pos);
+        free(cut);
+        free(alias);
+    }
+}
+
+/* A fill cut at any element equals the whole fill, across the fill's blocks of draws and from an
+ * unaligned start. An empty fill aligns to 64. Invalid weights build no table. */
+static void test_choice_fills(void) {
+    enum { N = 2000 };
+    static uint32_t want[N], got[N];
+    const double w[] = {3, 0, 1, 7.5, 0.125};
+    const double nan = NAN, bad[][2] = {{1, -1}, {1, nan}, {1, INFINITY}, {0, 0}};
+    size_t cuts[] = {1, 511, 512, 513, 1999}, c;
+    uint64_t cut[5];
+    uint32_t alias[5];
+    tandem_choice_table t;
+    tandem_rng a = tandem_seed(7, 9, 0), b;
+    CHECK(tandem_choice_build(&t, w, 5, cut, alias));
+    tandem_next_u8(&a);
+    b = a;
+    tandem_fill_choice(&a, want, N, &t);
+    for (c = 0; c < sizeof cuts / sizeof cuts[0]; c++) {
+        tandem_rng e = b;
+        tandem_fill_choice(&e, got, cuts[c], &t);
+        tandem_fill_choice(&e, got + cuts[c], N - cuts[c], &t);
+        CHECK(memcmp(want, got, sizeof got) == 0 && tandem_position(&e) == tandem_position(&a));
+    }
+    tandem_fill_choice(&b, got, 0, &t);
+    CHECK(tandem_position(&b) == 64);
+
+    CHECK(!tandem_choice_build(&t, w, 0, cut, alias));
+    for (c = 0; c < sizeof bad / sizeof bad[0]; c++) CHECK(!tandem_choice_build(&t, bad[c], 2, cut, alias));
+}
+
+/* 10^7 draws against the weights by Pearson's chi-square over the positive weights, 8 degrees of
+ * freedom, below 31.83, the 0.01 % point. The zero weight is never drawn. */
+static void test_choice_stats(void) {
+    enum { N = 10000000, M = 10 };
+    const double w[M] = {5, 0, 1, 2, 3, 0.5, 8, 13, 0.25, 21};
+    uint32_t *x = malloc(N * sizeof *x), alias[M];
+    uint64_t cut[M], count[M] = {0};
+    double total = 0, chi2 = 0;
+    tandem_choice_table t;
+    tandem_rng g = tandem_seed(2026, 11, 0);
+    size_t i;
+    CHECK(tandem_choice_build(&t, w, M, cut, alias));
+    tandem_fill_choice(&g, x, N, &t);
+    for (i = 0; i < N; i++) count[x[i]]++;
+    for (i = 0; i < M; i++) total += w[i];
+    for (i = 0; i < M; i++) {
+        double expect = (double)N * w[i] / total, d = (double)count[i] - expect;
+        if (w[i] > 0) chi2 += d * d / expect;
+    }
+    CHECK(count[1] == 0);
+    CHECK(chi2 < 31.83);
+    printf("choice: chi-square %.2f on 8 degrees of freedom\n", chi2);
+    free(x);
+}
+
 int main(void) {
     test_set_position();
     test_below_cross();
@@ -472,6 +551,9 @@ int main(void) {
     test_exponential_fills();
     test_exponential_stats();
     test_device_fixtures();
+    test_choice_cross();
+    test_choice_fills();
+    test_choice_stats();
     if (failures) {
         printf("%d failures\n", failures);
         return 1;

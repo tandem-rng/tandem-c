@@ -15,6 +15,12 @@ tandem_fork(&rng, kids, 4);                        /* from the current block, pa
 uint32_t die = tandem_u32_below(&rng, 6);          /* uniform on [0, 6), Lemire's method */
 double z = tandem_normal_f64(&rng);                /* ziggurat; link with -lm */
 double e = tandem_exponential_f64(&rng);           /* -ln(1 - u), Exp(1) */
+const double w[3] = {1, 2, 7};
+uint64_t cut[3];
+uint32_t alias[3];
+tandem_choice_table t;
+tandem_choice_build(&t, w, 3, cut, alias);         /* false for invalid weights */
+uint32_t pick = tandem_choice(&rng, &t);           /* 2 with probability 0.7 */
 ```
 
 ## Reference
@@ -34,6 +40,10 @@ double e = tandem_exponential_f64(&rng);           /* -ln(1 - u), Exp(1) */
   with tandem-cuda on the host.
 - Exponentials `tandem_exponential_*` and `tandem_fill_exponential_*`, bit exact on every
   compiler, target and device.
+- Weighted choice `tandem_choice_build`, `tandem_choice` and `tandem_fill_choice`, the integer
+  alias table of Appendix C. The build fills caller arrays and draws nothing. Each index takes
+  one 64-bit draw, a fill cut anywhere equals the whole fill, and the indices are bit exact
+  across ports. C++: `tandem::choice_table` and `rng::choice`, `rng::fill_choice`.
 - `tandem.c` includes `tandem_normal_tables.h`. Copy both when you vendor the library.
 - x86-64 builds pick an AVX2 and FMA copy of the fill loops at run time. Define
   `TANDEM_NO_AVX2` or `TANDEM_NO_SIMD` to turn off the AVX2 copy or all SIMD. The bits stay

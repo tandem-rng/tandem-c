@@ -28,6 +28,8 @@ tandem_rng worker = tandem_split(&rng, 7);        /* by index, from the key alon
 double z = tandem_normal_f64(&worker);            /* ziggurat; link with -lm */
 ```
 
+- Weighted choice by an integer alias table, one draw per index, bit exact across ports.
+
 See [API](docs/api.md) for the C++ `<random>` engine, MPI and OpenMP offload, and
 [design](docs/design.md), [tests](docs/tests.md) and [speed](docs/speed.md) for the rest.
 

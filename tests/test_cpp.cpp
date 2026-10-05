@@ -174,6 +174,30 @@ int main() {
     CHECK(tandem::rng(7) == tandem::rng(7));
     CHECK(tandem::rng(7) != tandem::rng(8));
 
+    // A copied table draws what the C table draws, and invalid weights throw.
+    {
+        const std::vector<double> w = {3, 0, 1, 7.5, 0.125};
+        std::uint64_t cut[5];
+        std::uint32_t alias[5];
+        tandem_choice_table ct;
+        tandem_choice_build(&ct, w.data(), w.size(), cut, alias);
+        tandem::choice_table built(w), t = built;
+        tandem::rng r(5);
+        tandem_rng cr = tandem_seed(5, 0, 0);
+        CHECK(t.size() == 5);
+        for (int i = 0; i < 100; i++) CHECK(r.choice(t) == tandem_choice(&cr, &ct));
+        std::vector<std::uint32_t> v = r.fill_choice(t, 1000), cv(1000);
+        tandem_fill_choice(&cr, cv.data(), 1000, &ct);
+        CHECK(v == cv && r.position() == tandem_position(&cr));
+        bool threw = false;
+        try {
+            tandem::choice_table bad(std::vector<double>{0, 0});
+        } catch (const std::invalid_argument &) {
+            threw = true;
+        }
+        CHECK(threw);
+    }
+
     if (failures) {
         std::printf("%d failures\n", failures);
         return 1;

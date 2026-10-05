@@ -35,7 +35,7 @@ tests/test_vectors: tests/test_vectors.c tests/vectors.h tandem.c tandem.h tande
 tests/test_stream: tests/test_stream.c tandem.c tandem.h tandem_normal_tables.h
 	$(CC) $(CFLAGS) -o $@ tests/test_stream.c tandem.c $(LDLIBS)
 
-tests/test_api: tests/test_api.c tests/cross_below.h tests/cross_exponential.h tests/cross_fill_below.h tests/cross_normal.h tests/cuda_fill_below.h tests/cuda_fill_normal.h tandem.c tandem.h tandem_normal_tables.h
+tests/test_api: tests/test_api.c tests/cross_below.h tests/cross_choice.h tests/cross_exponential.h tests/cross_fill_below.h tests/cross_normal.h tests/cuda_fill_below.h tests/cuda_fill_normal.h tandem.c tandem.h tandem_normal_tables.h
 	$(CC) $(CFLAGS) -o $@ tests/test_api.c tandem.c $(LDLIBS)
 
 tests/test_r123: tests/test_r123.c tandem123.h tandem.c tandem.h tandem_normal_tables.h
@@ -122,6 +122,7 @@ cross: tools/gen_cross
 	./tools/gen_cross fill_below > tests/cross_fill_below.h
 	./tools/gen_cross normal > tests/cross_normal.h
 	./tools/gen_cross exponential > tests/cross_exponential.h
+	./tools/gen_cross choice > tests/cross_choice.h
 	cp $(CORE_INCLUDE)/../tests/cross_fill_below.h tests/cuda_fill_below.h
 	cp $(CORE_INCLUDE)/../tests/cross_fill_normal.h tests/cuda_fill_normal.h
 

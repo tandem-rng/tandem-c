@@ -13,6 +13,7 @@
 #include <istream>
 #include <limits>
 #include <ostream>
+#include <stdexcept>
 #include <type_traits>
 #include <vector>
 
@@ -29,6 +30,36 @@ __extension__ typedef unsigned __int128 uint128;
  * 16-bit integer draw. */
 struct float16_bits {
     std::uint16_t bits;
+};
+
+/* The alias table of a weighted choice, tandem_choice_build. It throws std::invalid_argument
+ * unless 1 <= m < 2^32 and the weights are finite, not negative and not all zero. */
+class choice_table {
+public:
+    choice_table(const double *weights, std::size_t m) {
+        if (m == 0 || m > std::numeric_limits<std::uint32_t>::max())
+            throw std::invalid_argument("tandem::choice_table: need 1 to 2^32 - 1 weights");
+        cut_.resize(m);
+        alias_.resize(m);
+        tandem_choice_table t;
+        if (!tandem_choice_build(&t, weights, m, cut_.data(), alias_.data()))
+            throw std::invalid_argument("tandem::choice_table: weights must be finite and not "
+                                        "negative, with one positive");
+        capacity_ = t.capacity;
+    }
+    explicit choice_table(const std::vector<double> &weights)
+        : choice_table(weights.data(), weights.size()) {}
+
+    std::size_t size() const noexcept { return cut_.size(); }
+    /* The C table, a view of this object's storage. */
+    tandem_choice_table c_table() const noexcept {
+        return {capacity_, cut_.data(), alias_.data(), static_cast<std::uint32_t>(cut_.size())};
+    }
+
+private:
+    std::vector<std::uint64_t> cut_;
+    std::vector<std::uint32_t> alias_;
+    std::uint64_t capacity_;
 };
 
 class rng {
@@ -134,6 +165,22 @@ public:
         if constexpr (std::is_same_v<T, std::uint32_t>) return tandem_u32_below(&s_, n);
         else if constexpr (std::is_same_v<T, std::uint64_t>) return tandem_u64_below(&s_, n);
         else static_assert(sizeof(T) == 0, "tandem::rng::below: unsupported type");
+    }
+
+    /* An index of the table's weights, one 64-bit draw: tandem_choice. */
+    std::uint32_t choice(const choice_table &t) noexcept {
+        tandem_choice_table c = t.c_table();
+        return tandem_choice(&s_, &c);
+    }
+    /* n indices, the same values as n calls of choice(t): tandem_fill_choice. */
+    void fill_choice(const choice_table &t, std::uint32_t *out, std::size_t n) noexcept {
+        tandem_choice_table c = t.c_table();
+        tandem_fill_choice(&s_, out, n, &c);
+    }
+    std::vector<std::uint32_t> fill_choice(const choice_table &t, std::size_t n) {
+        std::vector<std::uint32_t> v(n);
+        fill_choice(t, v.data(), n);
+        return v;
     }
 
     /* Both Box-Muller normals of one pair of float uniforms, cos half first: tandem_normal2_f32.
