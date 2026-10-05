@@ -13,8 +13,8 @@ figure.
 |---|---|---|---|---|---|
 | `tandem_fill_u32` | 19.1 | 11.5 | 8.4 | 2.4 | 2.7 |
 | `tandem_fill_u64` | 19.1 | 11.6 | 8.7 | 2.4 | 4.9 |
-| `tandem_fill_f32` | 16.4 | 10.7 | 7.9 | 2.3 | 1.4 |
-| `tandem_fill_f64` | 16.3 | 10.5 | 7.0 | 2.3 | 2.8 |
+| `tandem_fill_f32` | 16.4 | 10.7 | 7.9 | 2.3 | 2.7 |
+| `tandem_fill_f64` | 16.3 | 10.5 | 7.0 | 2.3 | 5.0 |
 | `tandem_fill_normal_f64` | 7.6 | 5.8 | 3.6 | - | - |
 | `tandem_fill_normal_f32` | 5.4 | 4.6 | 3.3 | - | - |
 | `tandem_fill_exponential_f64` | 6.0 | 4.9 | 3.4 | - | - |
@@ -67,7 +67,9 @@ with `OMP_FLAGS="-mp=gpu -gpu=cc80" CC=nvc`.
 `make bench` also runs `tools/bench_std.cpp`, the C++ wrapper against the generators of the
 C and C++ standard libraries on the M4 (Apple clang 21, libc++), in GiB/s, from the same
 session as the CPU table. The standard generators have no fill interface, so each writes one
-value per call.
+value per call. Each loop has its own generator. The mt19937 figures move with code layout: in a
+program with only that loop, `std::mt19937_64` with `std::uniform_real_distribution<double>`
+reaches 8.2 GiB/s.
 
 | | GiB/s |
 |---|---|
@@ -84,5 +86,5 @@ value per call.
 | `arc4random_buf` | 4.4 |
 | `rand()`, 31 bits per call into `uint32_t` | 0.9 |
 | `random()`, 31 bits per call into `uint32_t` | 2.4 |
-| `std::mt19937` with `std::uniform_real_distribution<float>` | 1.4 |
-| `std::mt19937_64` with `std::uniform_real_distribution<double>` | 2.8 |
+| `std::mt19937` with `std::uniform_real_distribution<float>` | 2.7 |
+| `std::mt19937_64` with `std::uniform_real_distribution<double>` | 5.0 |
