@@ -306,6 +306,34 @@ static void test_empty_fills(void) {
         tandem_fill_normal_f64(&g, &d, 0);
         CHECK(tandem_position(&g) == ((pos[i] + 63u) & ~(uint64_t)63u) && d == 2);
     }
+    /* The n = 0 cases of the spec's conformance fixtures, one fill at a time from the key of
+     * seed 42 at bit 33. */
+    {
+        tandem_rng g = tandem_seed(42, 0, 0), h;
+        uint32_t u32;
+        uint64_t u64;
+        double d;
+        float f;
+        tandem_set_position(&g, 33);
+        h = g;
+        tandem_fill_u32_below(&h, &u32, 0, 10);
+        CHECK(tandem_position(&h) == 33);
+        h = g;
+        tandem_fill_u64_below(&h, &u64, 0, 10);
+        CHECK(tandem_position(&h) == 33);
+        h = g;
+        tandem_fill_normal_f32(&h, &f, 0);
+        CHECK(tandem_position(&h) == 33);
+        h = g;
+        tandem_fill_exponential_f64(&h, &d, 0);
+        CHECK(tandem_position(&h) == 33);
+        h = g;
+        tandem_fill_exponential_f32(&h, &f, 0);
+        CHECK(tandem_position(&h) == 33);
+        h = g;
+        tandem_fill_normal_f64(&h, &d, 0);
+        CHECK(tandem_position(&h) == 64);
+    }
 }
 
 /* Exponentials of tandem-cuda's core.hpp, whose polynomial logarithm is this library's on the
