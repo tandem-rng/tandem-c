@@ -19,7 +19,7 @@ figure.
 | `tandem_fill_normal_f32` | 5.4 | 4.6 | 3.3 | - | - |
 | `tandem_fill_exponential_f64` | 6.0 | 4.9 | 3.4 | - | - |
 | `tandem_fill_exponential_f32` | 6.6 | 5.4 | 4.5 | - | - |
-| `tandem_next_f64` chain | 5.1 | 4.1 | - | 2.1 | 5.4 |
+| `tandem_next_f64` chain | 5.1 | 4.1 | - | 2.2 | 5.5 |
 
 The Philox column is `tools/bench_philox.c`: Random123 1.14.0 `philox4x32` with 10 rounds,
 one block per call, written to the buffer with the bit-to-float maps of `tandem.c`. Clang does
@@ -80,7 +80,7 @@ value per call.
 | `std::mt19937`, `uint32_t` | 2.7 |
 | `std::mt19937_64`, `uint64_t` | 4.9 |
 | `std::mt19937_64` with `std::generate_canonical<double, 53>` | 5.0 |
-| `std::mt19937_64` with `std::uniform_real_distribution<double>`, chain | 5.4 |
+| `std::mt19937_64` with `std::uniform_real_distribution<double>`, chain | 5.5 |
 | `arc4random_buf` | 4.4 |
 | `rand()`, 31 bits per call into `uint32_t` | 0.9 |
 | `random()`, 31 bits per call into `uint32_t` | 2.4 |
