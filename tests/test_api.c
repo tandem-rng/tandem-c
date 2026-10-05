@@ -334,6 +334,16 @@ static void test_empty_fills(void) {
         h = g;
         tandem_fill_normal_f64(&h, &d, 0);
         CHECK(tandem_position(&h) == 64);
+        {
+            const double w[4] = {1, 2, 3, 4};
+            uint64_t cut[4];
+            uint32_t alias[4];
+            tandem_choice_table t;
+            CHECK(tandem_choice_build(&t, w, 4, cut, alias));
+            h = g;
+            tandem_fill_choice(&h, &u32, 0, &t);
+            CHECK(tandem_position(&h) == 64);
+        }
     }
 }
 
