@@ -49,6 +49,12 @@ int main() {
     std::mt19937_64 mt64_u64(42), mt64_f64(42), mt64_canon(42), mt64_chain(42);
     std::uniform_real_distribution<float> uf(0.0f, 1.0f);
     std::uniform_real_distribution<double> ud_f64(0.0, 1.0), ud_chain(0.0, 1.0);
+    std::mt19937 mt_nf32(42), mt_ef32(42);
+    std::mt19937_64 mt64_nf64(42), mt64_ef64(42);
+    std::normal_distribution<double> nd;
+    std::normal_distribution<float> nf;
+    std::exponential_distribution<double> ed;
+    std::exponential_distribution<float> ef;
 
     for (double t0 = now(); now() - t0 < 0.5;) rng.fill(u32.data(), n);
 
@@ -99,6 +105,18 @@ int main() {
         double acc = 0;
         for (std::size_t i = 0; i < n; i++) acc += ud_chain(mt64_chain);
         sink = acc;
+    });
+    bench("mt19937_64, normal_distribution<double>", n * 8, [&] {
+        for (std::size_t i = 0; i < n; i++) f64[i] = nd(mt64_nf64);
+    });
+    bench("mt19937, normal_distribution<float>", n * 4, [&] {
+        for (std::size_t i = 0; i < n; i++) f32[i] = nf(mt_nf32);
+    });
+    bench("mt19937_64, exponential_distribution<double>", n * 8, [&] {
+        for (std::size_t i = 0; i < n; i++) f64[i] = ed(mt64_ef64);
+    });
+    bench("mt19937, exponential_distribution<float>", n * 4, [&] {
+        for (std::size_t i = 0; i < n; i++) f32[i] = ef(mt_ef32);
     });
     (void)sink;
     return 0;

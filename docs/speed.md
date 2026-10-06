@@ -5,29 +5,31 @@
 ## CPU
 
 Apple M4 and AMD EPYC 7702P, one thread, `make bench`, clang `-O2`, minimum of seven runs of
-2^24 elements, in GiB/s. All M4 columns, Philox and mt19937 included, come from one session and
+2^24 elements, in GiB/s. All M4 columns, mt19937 and Philox included, come from one session and
 give the median of three passes. The EPYC column comes from an earlier session and has no chain
 figure.
 
-| | M4 | M4 with `TANDEM_NO_SIMD` | EPYC 7702P | Philox4x32-10, M4 | mt19937, M4 |
+| | M4 | M4 with `TANDEM_NO_SIMD` | EPYC 7702P | mt19937, M4 | Philox4x32-10, M4 |
 |---|---|---|---|---|---|
-| `tandem_fill_u32` | 19.1 | 11.5 | 8.4 | 2.4 | 2.7 |
-| `tandem_fill_u64` | 19.1 | 11.6 | 8.7 | 2.4 | 4.9 |
-| `tandem_fill_f32` | 16.4 | 10.7 | 7.9 | 2.3 | 2.7 |
-| `tandem_fill_f64` | 16.3 | 10.5 | 7.0 | 2.3 | 5.0 |
-| `tandem_fill_normal_f64` | 7.6 | 5.8 | 3.6 | - | - |
-| `tandem_fill_normal_f32` | 5.4 | 4.6 | 3.3 | - | - |
-| `tandem_fill_exponential_f64` | 6.0 | 4.9 | 3.4 | - | - |
-| `tandem_fill_exponential_f32` | 6.6 | 5.4 | 4.5 | - | - |
-| `tandem_next_f64` chain | 5.1 | 4.1 | - | 2.2 | 5.5 |
+| `tandem_fill_u32` | 19.0 | 11.8 | 8.4 | 2.7 | 2.5 |
+| `tandem_fill_u64` | 19.1 | 11.7 | 8.7 | 5.0 | 2.4 |
+| `tandem_fill_f32` | 16.4 | 10.7 | 7.9 | 2.8 | 2.4 |
+| `tandem_fill_f64` | 16.5 | 10.6 | 7.0 | 5.1 | 2.4 |
+| `tandem_fill_normal_f64` | 7.6 | 5.8 | 3.6 | 0.90 | - |
+| `tandem_fill_normal_f32` | 5.5 | 4.6 | 3.3 | 0.67 | - |
+| `tandem_fill_exponential_f64` | 6.1 | 5.0 | 3.4 | 1.1 | - |
+| `tandem_fill_exponential_f32` | 6.7 | 5.4 | 4.5 | 1.6 | - |
+| `tandem_next_f64` chain | 5.2 | 4.1 | - | 5.5 | 2.2 |
 
-The Philox column is `tools/bench_philox.c`: Random123 1.14.0 `philox4x32` with 10 rounds,
-one block per call, written to the buffer with the bit-to-float maps of `tandem.c`. Clang does
-not vectorize its 32x32-bit products, so it runs scalar. The mt19937 column is `std::mt19937`
-for u32 and f32 and `std::mt19937_64` for u64 and f64, with `std::uniform_real_distribution`
-for the floats, from `tools/bench_std.cpp`. The chain row sums 2^24 scalar draws, 8 bytes each,
-and Philox draws two f64 from each block. `tandem_next_f64` is a call into `tandem.c` per draw,
-while the mt19937_64 draw is inlined.
+The mt19937 column is `std::mt19937` for u32 and f32 and `std::mt19937_64` for u64 and f64,
+with `std::uniform_real_distribution`, `std::normal_distribution` and
+`std::exponential_distribution` of libc++ for the floats, from `tools/bench_std.cpp`. Random123's
+Box-Muller on Philox wrote fewer normals in the same session. The Philox column is
+`tools/bench_philox.c`: Random123 1.14.0 `philox4x32` with 10 rounds, one block per call,
+written to the buffer with the bit-to-float maps of `tandem.c`. Clang does not vectorize its
+32x32-bit products, so it runs scalar. The chain row sums 2^24 scalar draws, 8 bytes each, and
+Philox draws two f64 from each block. `tandem_next_f64` is a call into `tandem.c` per draw,
+while the mt19937_64 draw is inlined, which is why mt19937_64 leads that row.
 
 On the EPYC the base copy, which `TANDEM_NO_AVX2` selects, reaches 6.2 GiB/s for
 `tandem_fill_u32` and 2.9 for `tandem_fill_normal_f64`, whose library `fma` calls stay in the
@@ -73,18 +75,22 @@ reaches 8.2 GiB/s.
 
 | | GiB/s |
 |---|---|
-| `tandem::rng::fill<uint32_t>` | 19.0 |
+| `tandem::rng::fill<uint32_t>` | 19.2 |
 | `tandem::rng::fill<uint64_t>` | 19.0 |
 | `tandem::rng::fill<float>` | 16.5 |
-| `tandem::rng::fill<double>` | 16.3 |
+| `tandem::rng::fill<double>` | 16.5 |
 | `tandem::rng::next<double>` chain | 5.1 |
 | `std::uniform_real_distribution<double>` on `tandem::rng` | 5.1 |
 | `std::mt19937`, `uint32_t` | 2.7 |
-| `std::mt19937_64`, `uint64_t` | 4.9 |
-| `std::mt19937_64` with `std::generate_canonical<double, 53>` | 5.0 |
+| `std::mt19937_64`, `uint64_t` | 5.0 |
+| `std::mt19937_64` with `std::generate_canonical<double, 53>` | 5.1 |
 | `std::mt19937_64` with `std::uniform_real_distribution<double>`, chain | 5.5 |
-| `arc4random_buf` | 4.4 |
-| `rand()`, 31 bits per call into `uint32_t` | 0.9 |
-| `random()`, 31 bits per call into `uint32_t` | 2.4 |
-| `std::mt19937` with `std::uniform_real_distribution<float>` | 2.7 |
-| `std::mt19937_64` with `std::uniform_real_distribution<double>` | 5.0 |
+| `arc4random_buf` | 4.5 |
+| `rand()`, 31 bits per call into `uint32_t` | 0.92 |
+| `random()`, 31 bits per call into `uint32_t` | 2.5 |
+| `std::mt19937` with `std::uniform_real_distribution<float>` | 2.8 |
+| `std::mt19937_64` with `std::uniform_real_distribution<double>` | 5.1 |
+| `std::mt19937_64` with `std::normal_distribution<double>` | 0.90 |
+| `std::mt19937` with `std::normal_distribution<float>` | 0.67 |
+| `std::mt19937_64` with `std::exponential_distribution<double>` | 1.1 |
+| `std::mt19937` with `std::exponential_distribution<float>` | 1.6 |
