@@ -5,36 +5,48 @@
 ## CPU
 
 Apple M4 and AMD EPYC 7702P, one thread, `make bench`, clang `-O2`, minimum of seven runs of
-2^24 elements, in GiB/s. All M4 columns, mt19937 and Philox included, come from one session and
-give the median of three passes. The EPYC column comes from an earlier session and has no chain
-figure.
+2^24 elements, in GiB/s. Each machine's columns come from one session and give the median of
+three passes. The EPYC session ran on one pinned core.
 
-| | M4 | M4 with `TANDEM_NO_SIMD` | EPYC 7702P | mt19937, M4 | Philox4x32-10, M4 |
-|---|---|---|---|---|---|
-| `tandem_fill_u32` | 19.0 | 11.8 | 8.4 | 2.7 | 2.5 |
-| `tandem_fill_u64` | 19.1 | 11.7 | 8.7 | 5.0 | 2.4 |
-| `tandem_fill_f32` | 16.4 | 10.7 | 7.9 | 2.8 | 2.4 |
-| `tandem_fill_f64` | 16.5 | 10.6 | 7.0 | 5.1 | 2.4 |
-| `tandem_fill_normal_f64` | 7.6 | 5.8 | 3.6 | 0.90 | - |
-| `tandem_fill_normal_f32` | 5.5 | 4.6 | 3.3 | 0.67 | - |
-| `tandem_fill_exponential_f64` | 6.1 | 5.0 | 3.4 | 1.1 | - |
-| `tandem_fill_exponential_f32` | 6.7 | 5.4 | 4.5 | 1.6 | - |
-| `tandem_next_f64` chain | 5.2 | 4.1 | - | 5.5 | 2.2 |
+| | M4 | M4 with `TANDEM_NO_SIMD` | mt19937, M4 | Philox4x32-10, M4 |
+|---|---|---|---|---|
+| `tandem_fill_u32` | 19.0 | 11.8 | 2.7 | 2.5 |
+| `tandem_fill_u64` | 19.1 | 11.7 | 5.0 | 2.4 |
+| `tandem_fill_f32` | 16.4 | 10.7 | 2.8 | 2.4 |
+| `tandem_fill_f64` | 16.5 | 10.6 | 5.1 | 2.4 |
+| `tandem_fill_normal_f64` | 7.6 | 5.8 | 0.90 | - |
+| `tandem_fill_normal_f32` | 5.5 | 4.6 | 0.67 | - |
+| `tandem_fill_exponential_f64` | 6.1 | 5.0 | 1.1 | - |
+| `tandem_fill_exponential_f32` | 6.7 | 5.4 | 1.6 | - |
+| `tandem_next_f64` chain | 5.2 | 4.1 | 5.5 | 2.2 |
+
+| | EPYC 7702P | mt19937, EPYC | Philox4x32-10, EPYC |
+|---|---|---|---|
+| `tandem_fill_u32` | 8.6 | 1.2 | 1.1 |
+| `tandem_fill_u64` | 8.6 | 2.3 | 1.1 |
+| `tandem_fill_f32` | 7.7 | 1.1 | 1.0 |
+| `tandem_fill_f64` | 6.9 | 2.1 | 0.97 |
+| `tandem_fill_normal_f64` | 3.6 | 0.42 | - |
+| `tandem_fill_normal_f32` | 3.2 | 0.30 | - |
+| `tandem_fill_exponential_f64` | 3.4 | 0.65 | - |
+| `tandem_fill_exponential_f32` | 4.5 | 0.48 | - |
+| `tandem_next_f64` chain | 1.9 | 1.9 | 0.96 |
 
 The mt19937 column is `std::mt19937` for u32 and f32 and `std::mt19937_64` for u64 and f64,
 with `std::uniform_real_distribution`, `std::normal_distribution` and
-`std::exponential_distribution` of libc++ for the floats, from `tools/bench_std.cpp`. Random123's
-Box-Muller on Philox wrote fewer normals in the same session. The Philox column is
+`std::exponential_distribution` of libc++ for the floats, from `tools/bench_std.cpp`. On the EPYC
+the same file built against libstdc++ ran about twice as fast as against libc++ on every row, so
+that column is libstdc++. Random123's Box-Muller on Philox wrote fewer normals in the same session. The Philox column is
 `tools/bench_philox.c`: Random123 1.14.0 `philox4x32` with 10 rounds, one block per call,
 written to the buffer with the bit-to-float maps of `tandem.c`. Clang does not vectorize its
 32x32-bit products, so it runs scalar. The chain row sums 2^24 scalar draws, 8 bytes each, and
 Philox draws two f64 from each block. `tandem_next_f64` is a call into `tandem.c` per draw,
 while the mt19937_64 draw is inlined, which is why mt19937_64 leads that row.
 
-On the EPYC the base copy, which `TANDEM_NO_AVX2` selects, reaches 6.2 GiB/s for
-`tandem_fill_u32` and 2.9 for `tandem_fill_normal_f64`, whose library `fma` calls stay in the
-rare slow path. The EPYC build is clang 20 at plain `-O2` with no `-m` flags, so it runs the
-AVX2 copy picked at run time. With `-mavx2 -mfma` the f64 normal fill runs at the same speed.
+The EPYC build is conda-forge clang 23.1 at plain `-O2` with no `-m` flags, so it runs the AVX2
+copy picked at run time. The base copy, which `TANDEM_NO_AVX2` selects, ran at the same speed in
+the same session, 8.7 GiB/s for `tandem_fill_u32` and 3.6 for `tandem_fill_normal_f64`, whose
+library `fma` calls stay in the rare slow path.
 GCC 12 at `-O2` reaches 9.1 GiB/s for `tandem_fill_u32` and 3.2 for `tandem_fill_normal_f64`,
 but only 0.55 for `tandem_fill_normal_f32`. GCC honours `-fno-math-errno` only on the command
 line, not as a function attribute, so `sqrt` keeps its errno branch and the Box-Muller loop
