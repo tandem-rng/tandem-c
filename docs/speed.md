@@ -18,7 +18,6 @@ three passes. The EPYC session ran on one pinned core.
 | `tandem_fill_normal_f32` | 5.5 | 4.6 | 0.67 | - |
 | `tandem_fill_exponential_f64` | 6.1 | 5.0 | 1.1 | - |
 | `tandem_fill_exponential_f32` | 6.7 | 5.4 | 1.6 | - |
-| `tandem_next_f64` chain | 5.2 | 4.1 | 5.5 | 2.2 |
 
 | | EPYC 7702P | mt19937, EPYC | Philox4x32-10, EPYC |
 |---|---|---|---|
@@ -39,9 +38,8 @@ the same file built against libstdc++ ran about twice as fast as against libc++ 
 that column is libstdc++. Random123's Box-Muller on Philox wrote fewer normals in the same session. The Philox column is
 `tools/bench_philox.c`: Random123 1.14.0 `philox4x32` with 10 rounds, one block per call,
 written to the buffer with the bit-to-float maps of `tandem.c`. Clang does not vectorize its
-32x32-bit products, so it runs scalar. The chain row sums 2^24 scalar draws, 8 bytes each, and
-Philox draws two f64 from each block. `tandem_next_f64` is a call into `tandem.c` per draw,
-while the mt19937_64 draw is inlined, which is why mt19937_64 leads that row.
+32x32-bit products, so it runs scalar. The EPYC chain row predates the inline scalar draws
+below.
 
 The EPYC build is conda-forge clang 23.1 at plain `-O2` with no `-m` flags, so it runs the AVX2
 copy picked at run time. The base copy, which `TANDEM_NO_AVX2` selects, ran at the same speed in
@@ -69,6 +67,30 @@ machine and 16.1 at `-O3`, because it keeps the lane states in memory for part o
 loop. The scalar fallback is one straight-line step per lane in a loop over the eight lanes.
 Clang vectorizes that loop, GCC 16 does not at `-O2` and reaches 5.6 GiB/s.
 
+## Scalar draws
+
+Apple M4, one thread, `tools/bench_scalar.c` and `tools/bench_std.cpp`, clang `-O2`. Each
+chain sums 2^24 dependent draws, minimum of seven runs, median of three passes from one session,
+in GiB/s of output at 8 bytes per draw.
+
+| | Tandem | `TANDEM_NO_SIMD` | xoshiro256++ | mt19937_64 | Philox4x32-10 |
+|---|---|---|---|---|---|
+| `tandem_next_u64` chain | 10.6 | 7.0 | 10.7 | 4.9 | - |
+| `tandem_next_f64` chain | 9.7 | 6.7 | 10.4 | 5.5 | 2.2 |
+| `tandem_next_f64` chain, through a function pointer | 5.7 | 4.8 | - | - | - |
+
+xoshiro256++ is the public-domain reference code, inlined into the loop. mt19937_64 is the
+libc++ engine, with `std::uniform_real_distribution<double>` for f64. Philox draws two f64 from
+each block of `tools/bench_philox.c`. The f64 chains wait on the latency of each double add.
+
+The 32- and 64-bit draws are inline functions in `tandem.h`. A draw inside the readable row is
+a load and an add in the caller. The one call, `tandem_refill`, makes the next row readable
+and steps the cache one row further, into the other of its two row slots. A loop so keeps the
+position in a register, and no draw reads a row that was just stored, which store forwarding
+serves badly. The library also exports the draws as functions for callers from other
+languages, which pay a call per draw: the function pointer row. Before the inline draws,
+`tandem_next_f64` was such a call everywhere and its chain ran at 5.2 GiB/s.
+
 ## GPU
 
 OpenMP target offload on an A100 40 GB PCIe (driver 570, GPU idle before each run) with nvc
@@ -83,7 +105,8 @@ C and C++ standard libraries on the M4 (Apple clang 21, libc++), in GiB/s, from 
 session as the CPU table. The standard generators have no fill interface, so each writes one
 value per call. Each loop has its own generator. The mt19937 figures move with code layout: in a
 program with only that loop, `std::mt19937_64` with `std::uniform_real_distribution<double>`
-reaches 8.2 GiB/s.
+reaches 8.2 GiB/s. The two `tandem::rng` scalar rows and the `uint64_t` chain row come from the
+session of the scalar draws.
 
 | | GiB/s |
 |---|---|
@@ -91,10 +114,11 @@ reaches 8.2 GiB/s.
 | `tandem::rng::fill<uint64_t>` | 19.0 |
 | `tandem::rng::fill<float>` | 16.5 |
 | `tandem::rng::fill<double>` | 16.5 |
-| `tandem::rng::next<double>` chain | 5.1 |
-| `std::uniform_real_distribution<double>` on `tandem::rng` | 5.1 |
+| `tandem::rng::next<double>` chain | 8.9 |
+| `std::uniform_real_distribution<double>` on `tandem::rng` | 8.2 |
 | `std::mt19937`, `uint32_t` | 2.7 |
 | `std::mt19937_64`, `uint64_t` | 5.0 |
+| `std::mt19937_64`, `uint64_t`, chain | 4.9 |
 | `std::mt19937_64` with `std::generate_canonical<double, 53>` | 5.1 |
 | `std::mt19937_64` with `std::uniform_real_distribution<double>`, chain | 5.5 |
 | `arc4random_buf` | 4.5 |

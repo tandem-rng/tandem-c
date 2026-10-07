@@ -62,6 +62,36 @@ static void test_set_position(void) {
     }
 }
 
+/* Draws of every width and fills in any order read what a fresh generator at the same position
+ * reads, whatever rows the cache holds or stepped ahead to. K = 1 opens a new group every row. */
+static void test_cache_history(void) {
+    uint32_t key[4] = {5, 6, 7, 8}, Ks[] = {1, 32};
+    uint64_t want[40], got[40], lcg = 1;
+    for (size_t k = 0; k < sizeof Ks / sizeof Ks[0]; k++) {
+        tandem_rng g = tandem_from_key(key, 0, Ks[k]);
+        for (int step = 0; step < 4000; step++) {
+            tandem_rng fresh = tandem_from_key(key, tandem_position(&g), Ks[k]);
+            lcg = lcg * 6364136223846793005u + 1442695040888963407u;
+            switch (lcg >> 61) {
+            case 0: CHECK(tandem_next_u8(&g) == tandem_next_u8(&fresh)); break;
+            case 1: CHECK(tandem_next_u16(&g) == tandem_next_u16(&fresh)); break;
+            case 2: CHECK(tandem_next_u32(&g) == tandem_next_u32(&fresh)); break;
+            case 3: CHECK(tandem_next_f32(&g) == tandem_next_f32(&fresh)); break;
+            case 4: CHECK(tandem_next_f64(&g) == tandem_next_f64(&fresh)); break;
+            case 5: {
+                size_t n = (size_t)(lcg >> 32) % 40u;
+                tandem_fill_u64(&g, got, n);
+                tandem_fill_u64(&fresh, want, n);
+                CHECK(memcmp(got, want, n * sizeof *got) == 0);
+                break;
+            }
+            default: CHECK(tandem_next_u64(&g) == tandem_next_u64(&fresh)); break;
+            }
+            CHECK(tandem_position(&g) == tandem_position(&fresh));
+        }
+    }
+}
+
 /* Values and stream position of tandem-cuda's urand(range) and urand64(range). The position
  * pins the number of rejected draws as well as the values. */
 static void test_below_cross(void) {
@@ -549,6 +579,7 @@ static void test_choice_stats(void) {
 
 int main(void) {
     test_set_position();
+    test_cache_history();
     test_below_cross();
     test_fill_below();
     test_fill_below_cut();

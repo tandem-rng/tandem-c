@@ -29,6 +29,7 @@ double z = tandem_normal_f64(&worker);            /* ziggurat; link with -lm */
 ```
 
 - Weighted choice by an integer alias table, one draw per index, bit exact across ports.
+- Inline 32- and 64-bit scalar draws, as fast as xoshiro256++ in a loop on an Apple M4.
 
 See [API](docs/api.md) for the C++ `<random>` engine, MPI and OpenMP offload, and
 [design](docs/design.md), [tests](docs/tests.md) and [speed](docs/speed.md) for the rest.
