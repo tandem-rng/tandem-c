@@ -26,7 +26,10 @@ uint32_t pick = tandem_choice(&rng, &t);           /* 2 with probability 0.7 */
 ## Reference
 
 - `tandem_rng`: a copyable value, 128-bit key, 64-bit bit position, chunk length `K`. A
-  generator is this transport form plus a cache of the current 1024-bit row. Copy it by value.
+  generator is this transport form plus a cache of two 1024-bit rows, 432 bytes in all. Copy it
+  by value. A binding that holds it in another language must give it those 432 bytes.
+- `tandem_next_u32`, `tandem_next_u64`, `tandem_next_f32` and `tandem_next_f64` are inline in
+  `tandem.h`. The library also exports them as functions.
 - Every specification type: `bool`, 8 to 128-bit unsigned integers, `float`, `double`,
   binary16 bit patterns, Unicode scalars, complex pairs. Scalar draws and `tandem_fill_*`.
   Signed integers are the unsigned draws reinterpreted. Random access does not advance.
