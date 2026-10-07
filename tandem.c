@@ -293,8 +293,12 @@ static inline void quad_T(quad *q) {
 }
 
 /* F on chunks c0 .. c0+3 at once. The rounds run on a local copy: through the pointer GCC -O2
-   keeps the state in memory for all eight rounds, which costs half the fill speed at K = 32. */
-static void quad_seed(quad *q, const uint32_t key[4], uint64_t c0) {
+   keeps the state in memory for all eight rounds, which costs half the fill speed at K = 32.
+   It must inline: out of line, the pointer into the caller's lanes keeps them in memory across
+   the whole row loop, which costs a third of the fill speed. Clang 23 at -O3 unrolls the rounds
+   on AArch64, then finds the body too large to inline, and the unrolled rounds spill. */
+static inline __attribute__((always_inline)) void quad_seed(quad *q, const uint32_t key[4],
+                                                            uint64_t c0) {
     uint32_t lo = (uint32_t)c0;
     u32x4 counter = {lo, lo + 1u, lo + 2u, lo + 3u}, zero = {0, 0, 0, 0};
     quad w;
@@ -306,6 +310,9 @@ static void quad_seed(quad *q, const uint32_t key[4], uint64_t c0) {
     w.h[1] = zero + key[1];
     w.h[2] = zero + key[2];
     w.h[3] = zero + key[3];
+#if defined(__clang__)
+#pragma clang loop unroll(disable)
+#endif
     for (int r = 0; r < 8; r++) {
         quad_T(&w);
         w.o[0] ^= RC[r];
