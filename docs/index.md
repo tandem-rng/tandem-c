@@ -21,8 +21,12 @@ Or compile `tandem.c` into your project, with `tandem_normal_tables.h` next to i
 stages the installed files.
 
 The library needs C11 and C++17 and libm, and nothing newer, so projects that vendor it can
-keep their own flags. `make` builds it as C23 and C++23 with clang, the primary compiler. Set
-`CC` and `CXX` for another compiler.
+keep their own flags, with one exception: the floating-point model must stay strict. The
+Float32 exponential carries its logarithm as a high and a low part, and a compiler that
+reassociates or contracts those sums changes the values. Build `tandem.c` with
+`-ffp-contract=off` and without fast-math. The Intel compiler `icx` defaults to
+`-fp-model=fast`, so pass `-fp-model=precise -ffp-contract=off` there. `make` builds it as C23
+and C++23 with clang, the primary compiler. Set `CC` and `CXX` for another compiler.
 
 The `packaging/` directory holds a Spack recipe (`spack/package.py`) and a conda-forge style
 recipe (`conda/recipe.yaml`). Neither is submitted to Spack or conda-forge yet, and both build

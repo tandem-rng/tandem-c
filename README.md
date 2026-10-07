@@ -10,7 +10,7 @@ Reference C and C++ implementation of [Tandem8x32](https://github.com/tandem-rng
 noncryptographic pseudorandom number generator. It produces the stream the specification
 defines, bit for bit, with SIMD fills on CPUs and OpenMP target fills on GPUs.
 
-Build with `make`, or compile `tandem.c` into your project. The library needs C11, C++17 and libm.
+Build with `make`, or compile `tandem.c` into your project with `-ffp-contract=off` and no fast-math. The library needs C11, C++17 and libm.
 
 ```sh
 make                              # libtandem.a, built with clang
