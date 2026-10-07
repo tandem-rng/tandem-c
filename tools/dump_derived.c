@@ -24,7 +24,8 @@
  * one uniform on a 2^-53 grid, and its error of up to 1.1e-15 moves a tenth of the draws by one
  * 2^-52 step, which biases bit 0 of a 52-bit u. The Float32 draws are functions of uniforms on
  * a 2^-24 grid: at 24 bits PractRand finds that grid within 2^34 bytes even in the controls
- * below, and the Float32 exponential's error of up to 2.8e-7 shows in its own 24-bit u.
+ * below. The Float32 exponential is within 0.571 ulp and maps every draw back to its own grid
+ * point, as the exact control does.
  *
  * Two controls take the same Float32 uniforms through double-precision libm and round once to
  * float, the law a Float32 draw can at best have on 24-bit uniforms:

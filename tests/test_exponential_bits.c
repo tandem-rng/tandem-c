@@ -1,13 +1,13 @@
 /* The exponential fills are bit identical on every compiler and target: a hash of 1e6 f64 and
  * 1e6 f32 exponentials from each of several positions must equal the value recorded from the M4
  * clang build. tools/dump_exponentials.c writes the same bytes, whose SHA-256 is
- * 5c035a4ef1368231d25a9c2f9201be2df3224e28a14549a50625d0db3770ef4e. */
+ * 7b12b7c36baf14ab42f7736a5a67925c3c7b1bfafc8d50f078ba1af927044dd5. */
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "../tandem.h"
 
-#define EXPECTED_HASH 0x47f8f98297d94ee2ull
+#define EXPECTED_HASH 0x1c761a2d471073c2ull
 
 static uint64_t fnv(uint64_t h, const void *p, size_t n) {
     const unsigned char *b = p;

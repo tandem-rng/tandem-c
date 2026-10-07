@@ -62,7 +62,9 @@ the M4.
 Exponentials `tandem_exponential_f64` and `_f32` and the fills `tandem_fill_exponential_f64`
 and `_f32` return `-ln(1 - u)` from one uniform `u` each, as Appendix A of the specification
 describes: element i of a fill comes from uniform i, so a fill equals the scalar draws and a
-fill cut anywhere equals the whole fill. They use the logarithm of the normal loop, with no
-libm call, and tandem-cuda runs the same arithmetic on the device, so exponentials are bit
-exact across compilers, targets and devices. The maximum error is 1.1e-15 relative for f64
-and 2.8e-7 for f32, checked over all 2^24 f32 inputs.
+fill cut anywhere equals the whole fill. They use no libm call, and tandem-cuda runs the same
+arithmetic on the device, so exponentials are bit exact across compilers, targets and devices.
+f64 uses the logarithm of the normals. f32 carries `u = (2 - 2m) / (m + 1)` as two floats and
+adds `k ln 2` by an exact two-sum, because an error near 1 ulp moves `1 - exp(-x)` to a
+neighbouring 2^-24 grid point. The maximum error is 1.1e-15 relative for f64 and 0.571 ulp for
+f32, checked over all 2^24 f32 inputs, and every f32 draw maps back to its own grid point.
