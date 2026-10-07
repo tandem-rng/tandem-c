@@ -41,7 +41,7 @@ Kolmogorov-Smirnov and Anderson-Darling p-values above 0.001.
 whole fill and the scalar draws, and checks 10^7 f64 and 10^7 f32 exponentials against Exp(1):
 the first four raw moments within five standard errors and a Kolmogorov-Smirnov statistic
 below the 0.1 % point. `tests/test_exponential_bits.c` checks the FNV-1a hash
-`47f8f98297d94ee2` of 10^6 f64 and 10^6 f32 exponentials from each of five positions.
+`1c761a2d471073c2` of 10^6 f64 and 10^6 f32 exponentials from each of five positions.
 
 `tests/test_cpp.cpp` checks that the C++ wrapper, including `at`, `below`, `normal`, `normal2`,
 `exponential`, `set_position` and the extra draw types, agrees with the C API and runs
