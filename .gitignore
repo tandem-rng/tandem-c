@@ -17,3 +17,4 @@ tools/dump_normals
 tests/test_exponential_bits
 tools/dump_exponentials
 tools/bench_philox
+tools/dump_derived

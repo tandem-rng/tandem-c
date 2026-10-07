@@ -79,6 +79,8 @@ the stream dump. `tests/test_api.c` runs a chi-square test on 10^7 indices.
 is `700ec4d2f4d6b82aaa56c6eff18a4e5919585fdbd093988773383d580ea610d1`.
 `tools/dump_exponentials.c` writes the bytes that `tests/test_exponential_bits.c` hashes, whose
 SHA-256 is `5c035a4ef1368231d25a9c2f9201be2df3224e28a14549a50625d0db3770ef4e`.
+`tools/dump_derived.c` maps the derived draws back to uniform bits for PractRand and TestU01.
+The results are in `docs/statistics.md` of the spec repository.
 
 ## CI
 
