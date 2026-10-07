@@ -745,11 +745,13 @@ NOINLINE static void NORMAL_BLOCK_F32(const float *restrict u, float *restrict z
 
         /* Rotate by q quarter turns with bit operations: odd q swaps the two, bit 1 of q
          * negates the sine, and bit 1 of q + 1 negates the cosine. */
-        uint32_t qu = (uint32_t)q, sm = (uint32_t)0 - (qu & 1u), sb, cb, xb, yb;
+        uint32_t qu = (uint32_t)q, sb, cb, xb, yb;
         memcpy(&sb, &sn, 4);
         memcpy(&cb, &cs, 4);
-        xb = (sb & sm) | (cb & ~sm);
-        yb = (cb & sm) | (sb & ~sm);
+        /* A select, not a mask: clang 23 splits the masked or into three instructions on
+         * AArch64, where it keeps the select as one bsl. */
+        xb = (qu & 1u) ? sb : cb;
+        yb = (qu & 1u) ? cb : sb;
         xb ^= ((qu + 1u) << 30) & 0x80000000u;
         yb ^= (qu << 30) & 0x80000000u;
         float cx, sx;
