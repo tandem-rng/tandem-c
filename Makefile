@@ -87,6 +87,9 @@ stats: tests/test_normal_stats
 tools/bench:tools/bench.c tandem.c tandem.h tandem_normal_tables.h
 	$(CC) $(CFLAGS) -o $@ tools/bench.c tandem.c $(LDLIBS)
 
+tools/bench_scalar: tools/bench_scalar.c tandem.c tandem.h tandem_normal_tables.h
+	$(CC) $(CFLAGS) -o $@ tools/bench_scalar.c tandem.c $(LDLIBS)
+
 tools/bench_std: tools/bench_std.cpp tandem.hpp tandem.o
 	$(CXX) $(CXXFLAGS) -o $@ tools/bench_std.cpp tandem.o $(LDLIBS)
 
@@ -97,8 +100,9 @@ tools/normal_accuracy: tools/normal_accuracy.c tandem.c tandem.h tandem_normal_t
 tools/bench_philox: tools/bench_philox.c
 	$(CC) $(CFLAGS) -isystem tools/random123 -o $@ tools/bench_philox.c $(LDLIBS)
 
-bench: tools/bench tools/bench_std tools/bench_philox
+bench: tools/bench tools/bench_scalar tools/bench_std tools/bench_philox
 	./tools/bench
+	./tools/bench_scalar
 	./tools/bench_std
 	./tools/bench_philox
 
@@ -135,4 +139,4 @@ install: libtandem.a
 	    -e 's|@VERSION@|$(VERSION)|' packaging/tandem.pc.in > $(DESTDIR)$(LIBDIR)/pkgconfig/tandem.pc
 
 clean:
-	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_exponential_bits tests/test_cpp tests/test_normal_stats tools/bench tools/bench_std tools/bench_philox tools/gen_cross tools/normal_accuracy tests/test_target tools/bench_target
+	rm -f tandem.o libtandem.a tests/test_vectors tests/test_stream tests/test_api tests/test_r123 tests/test_normal_bits tests/test_exponential_bits tests/test_cpp tests/test_normal_stats tools/bench tools/bench_scalar tools/bench_std tools/bench_philox tools/gen_cross tools/normal_accuracy tests/test_target tools/bench_target
