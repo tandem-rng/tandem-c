@@ -30,6 +30,9 @@ double z = tandem_normal_f64(&worker);            /* ziggurat; link with -lm */
 
 - Weighted choice by an integer alias table, one draw per index, bit exact across ports.
 - Inline 32- and 64-bit scalar draws, as fast as xoshiro256++ in a loop on an Apple M4.
+- A plain `make` on x86-64 runs the AVX2 and FMA copy on every CPU that has them, picked at
+  run time. Without them, the base copy rounds each fused multiply-add by an exact emulation,
+  with the same bits and no library call.
 
 See [API](docs/api.md) for the C++ `<random>` engine, MPI and OpenMP offload, and
 [design](docs/design.md), [tests](docs/tests.md) and [speed](docs/speed.md) for the rest.
