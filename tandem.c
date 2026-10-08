@@ -110,13 +110,14 @@ void tandem_block(const uint32_t key[4], uint64_t c, uint32_t j, uint32_t out[4]
 #pragma STDC FP_CONTRACT OFF
 #endif
 
-/* Every multiply-add of the normal loops is an explicit fused multiply-add, so that every
- * compiler and target gives the same bits. On hardware without a fused instruction fma() is a
- * correct but slow library call that the compiler cannot vectorize, so x86 runs the AVX2 and FMA
- * copy of the loop when the CPU has them. Plain products and sums are never contracted, because
- * the loop is built with contraction off. */
-#define FMA(x, y, z) fma((x), (y), (z))
-#define FMAF(x, y, z) fmaf((x), (y), (z))
+/* Every multiply-add of the normal loops is an explicit fused multiply-add, rounded once, so
+ * that every compiler and target gives the same bits. Plain products and sums are never
+ * contracted, because the loop is built with contraction off. FMA and FMAF are the instruction
+ * where the build has one, and an exact emulation elsewhere (see fma_exact below), since fma()
+ * there is a library call that keeps the loops scalar. */
+#if (defined(__FP_FAST_FMA) && defined(__FP_FAST_FMAF)) || defined(__FMA__) || defined(__aarch64__)
+#define TANDEM_FMA_INSN 1
+#endif
 
 /* Compilers may fuse or inline differently per call site. One out-of-line body for each
  * precision keeps the scalar draws and the fills bit identical. */
@@ -133,61 +134,36 @@ void tandem_block(const uint32_t key[4], uint64_t c, uint32_t j, uint32_t out[4]
 #define FP_INLINE static inline
 #endif
 
-/* -2 ln x for x in (0, 1], the logarithm of the normals and the Float64 exponentials. x =
- * mant 2^k with mant in [sqrt(1/2), sqrt(2)) from the bits: shifting the exponent field by the
- * bits of sqrt(1/2) makes the mantissa rollover pick k. Then -2 ln x = 2 nk ln 2 - 4 s p, with
- * ln 2 split so that nk * ln2_hi is exact. No plain product feeds a plain sum, so contraction cannot
- * change the bits. */
-FP_INLINE double neg2_log_f64(double x) {
-    double mant;
-    uint64_t bits, ix;
-    memcpy(&bits, &x, 8);
-    ix = bits + 0x00095f6200000000u;
-    double nk = (double)(1023 - (int64_t)(ix >> 52)); /* -k */
-    ix = (ix & 0x000fffffffffffffu) + 0x3fe6a09e00000000u;
-    memcpy(&mant, &ix, 8);
-    double s = (mant - 1.0) / (mant + 1.0), zz = s * s;
-    double p = FMA(zz, FMA(zz, FMA(zz, FMA(zz, FMA(zz, FMA(zz, 0.08312363319426472,
-               0.09070001083303751), 0.11111433317907482), 0.14285712049336274),
-               0.2000000000566491), 0.33333333333331017), 1.0);
-    return FMA(nk, 3.816429394731813e-10, FMA(nk, 1.3862943607382476, (s * -4.0) * p));
+#ifndef TANDEM_FMA_INSN
+/* fma rounded once without an FMA instruction. The float form takes the product exactly in
+ * double and rounds the sum to odd, after which rounding to float is correct; the double form
+ * adds Dekker's exact product to c by two error-free sums, the last rounded to odd (Boldo and
+ * Melquiond, IEEE Trans. Computers 57, 2008). Both equal the instruction bit for bit while
+ * nothing underflows or overflows, which the arguments here never do. */
+FP_INLINE double round_to_odd(double s, double e) {
+    uint64_t b, step;
+    memcpy(&b, &s, 8);
+    /* An inexact sum with an even last bit moves one ulp toward the exact one. */
+    step = (e > 0.0) == (s > 0.0) ? 1u : ~(uint64_t)0;
+    b += (e != 0.0 && !(b & 1u)) ? step : 0u;
+    memcpy(&s, &b, 8);
+    return s;
 }
 
-FP_INLINE float neg2_log_f32(float x) {
-    float mant;
-    uint32_t bits, ix;
-    memcpy(&bits, &x, 4);
-    ix = bits + 0x004afb0du;
-    float nk = (float)(127 - (int32_t)(ix >> 23)); /* -k */
-    ix = (ix & 0x007fffffu) + 0x3f3504f3u;
-    memcpy(&mant, &ix, 4);
-    float s = (mant - 1.0f) / (mant + 1.0f), zz = s * s;
-    float p = FMAF(zz, FMAF(zz, FMAF(zz, 0.14275366f, 0.20000061f), 0.33333334f), 1.0f);
-    return FMAF(nk, 2.857213530660374e-06f, FMAF(nk, 1.38629150390625f, (s * -4.0f) * p));
+FP_INLINE float fmaf_exact(float a, float b, float c) {
+    double p = (double)a * (double)b, s = p + (double)c, t = s - p;
+    return (float)round_to_odd(s, (p - (s - t)) + ((double)c - t));
 }
 
-/* -ln x for x in (0, 1], the Float32 exponentials, within 0.58 ulp for every 1 - x on the
- * 2^-24 grid. An error near 1 ulp moves 1 - exp(-ln x) to a neighbouring grid point, so the
- * leading term u = (2 - 2m) / (m + 1) = -2 s is carried as uh + r / d: m + 1 = d + dl exactly,
- * and r is the residual of uh. nk ln2_hi + uh is split exactly by fast two-sum, because
- * nk ln2_hi is exact and either 0 or larger than |uh|. uh rounds in an fma, so that no
- * contraction feeds the unrounded num rcp to the two-sum, and products of nk are exact. The tail
- * u^3 q(u^2) is a minimax fit to 2 atanh(u / 2) - u. */
-FP_INLINE float neg_log_f32(float x) {
-    float mant;
-    uint32_t bits, ix;
-    memcpy(&bits, &x, 4);
-    ix = bits + 0x004afb0du;
-    float nk = (float)(127 - (int32_t)(ix >> 23)); /* -k */
-    ix = (ix & 0x007fffffu) + 0x3f3504f3u;
-    memcpy(&mant, &ix, 4);
-    float num = FMAF(mant, -2.0f, 2.0f), d = mant + 1.0f, dl = mant - (d - 1.0f);
-    float rcp = 1.0f / d, uh = FMAF(num, rcp, 0.0f);
-    float r = FMAF(-uh, dl, FMAF(-uh, d, num)), v = uh * uh;
-    float q = FMAF(v, FMAF(v, 0.0023109776f, 0.012496489f), 0.08333336f);
-    float a = nk * 0.693145751953125f, hi = a + uh, e = uh - (hi - a);
-    return hi + FMAF(uh * v, q, FMAF(r, rcp, FMAF(nk, 1.428606765330187e-06f, e)));
+FP_INLINE double fma_exact(double a, double b, double c) {
+    double ca = 134217729.0 * a, ah = ca - (ca - a), al = a - ah; /* split at 2^27 + 1 */
+    double cb = 134217729.0 * b, bh = cb - (cb - b), bl = b - bh;
+    double p = a * b, pl = ((ah * bh - p) + ah * bl + al * bh) + al * bl; /* p + pl = a b */
+    double th = c + p, tv = th - c, tl = (c - (th - tv)) + (p - tv);      /* th + tl = c + p */
+    double s = tl + pl, sv = s - tl, e = (tl - (s - sv)) + (pl - sv);     /* s + e = tl + pl */
+    return th + round_to_odd(s, e);
 }
+#endif
 
 /* sqrt may set errno on a negative argument, which keeps it a library call on glibc and stops
  * the loop from vectorizing. The argument is never negative here, so the plain instruction is
@@ -670,6 +646,11 @@ static inline void lanes_store(const lanes *L, char *dst, store_mode mode) {
 #define ZIG_SLOW zig_slow_avx2
 #define ZIG_RESOLVE zig_resolve_avx2
 #define ZIG_FILL_F64 zig_fill_f64_avx2
+#define NEG2_LOG_F64 neg2_log_f64_avx2
+#define NEG2_LOG_F32 neg2_log_f32_avx2
+#define NEG_LOG_F32 neg_log_f32_avx2
+#define FMA(x, y, z) fma((x), (y), (z))
+#define FMAF(x, y, z) fmaf((x), (y), (z))
 #else
 #define RUN_ROWS run_rows_base
 #define STEP_ROW step_row_base
@@ -681,6 +662,16 @@ static inline void lanes_store(const lanes *L, char *dst, store_mode mode) {
 #define ZIG_SLOW zig_slow_base
 #define ZIG_RESOLVE zig_resolve_base
 #define ZIG_FILL_F64 zig_fill_f64_base
+#define NEG2_LOG_F64 neg2_log_f64_base
+#define NEG2_LOG_F32 neg2_log_f32_base
+#define NEG_LOG_F32 neg_log_f32_base
+#ifdef TANDEM_FMA_INSN
+#define FMA(x, y, z) fma((x), (y), (z))
+#define FMAF(x, y, z) fmaf((x), (y), (z))
+#else
+#define FMA(x, y, z) fma_exact((x), (y), (z))
+#define FMAF(x, y, z) fmaf_exact((x), (y), (z))
+#endif
 #endif
 
 #ifndef TANDEM_AVX2_PASS
@@ -748,13 +739,69 @@ static void STEP_ROW(tandem_rng *rng) {
     lanes_save(&L, rng);
 }
 
+/* -2 ln x for x in (0, 1], the logarithm of the normals and the Float64 exponentials. x =
+ * mant 2^k with mant in [sqrt(1/2), sqrt(2)) from the bits: shifting the exponent field by the
+ * bits of sqrt(1/2) makes the mantissa rollover pick k. Then -2 ln x = 2 nk ln 2 - 4 s p, with
+ * ln 2 split so that nk * ln2_hi is exact. No plain product feeds a plain sum, so contraction cannot
+ * change the bits. */
+FP_INLINE double NEG2_LOG_F64(double x) {
+    double mant;
+    uint64_t bits, ix;
+    memcpy(&bits, &x, 8);
+    ix = bits + 0x00095f6200000000u;
+    double nk = (double)(1023 - (int64_t)(ix >> 52)); /* -k */
+    ix = (ix & 0x000fffffffffffffu) + 0x3fe6a09e00000000u;
+    memcpy(&mant, &ix, 8);
+    double s = (mant - 1.0) / (mant + 1.0), zz = s * s;
+    double p = FMA(zz, FMA(zz, FMA(zz, FMA(zz, FMA(zz, FMA(zz, 0.08312363319426472,
+               0.09070001083303751), 0.11111433317907482), 0.14285712049336274),
+               0.2000000000566491), 0.33333333333331017), 1.0);
+    return FMA(nk, 3.816429394731813e-10, FMA(nk, 1.3862943607382476, (s * -4.0) * p));
+}
+
+FP_INLINE float NEG2_LOG_F32(float x) {
+    float mant;
+    uint32_t bits, ix;
+    memcpy(&bits, &x, 4);
+    ix = bits + 0x004afb0du;
+    float nk = (float)(127 - (int32_t)(ix >> 23)); /* -k */
+    ix = (ix & 0x007fffffu) + 0x3f3504f3u;
+    memcpy(&mant, &ix, 4);
+    float s = (mant - 1.0f) / (mant + 1.0f), zz = s * s;
+    float p = FMAF(zz, FMAF(zz, FMAF(zz, 0.14275366f, 0.20000061f), 0.33333334f), 1.0f);
+    return FMAF(nk, 2.857213530660374e-06f, FMAF(nk, 1.38629150390625f, (s * -4.0f) * p));
+}
+
+/* -ln x for x in (0, 1], the Float32 exponentials, within 0.58 ulp for every 1 - x on the
+ * 2^-24 grid. An error near 1 ulp moves 1 - exp(-ln x) to a neighbouring grid point, so the
+ * leading term u = (2 - 2m) / (m + 1) = -2 s is carried as uh + r / d: m + 1 = d + dl exactly,
+ * and r is the residual of uh. nk ln2_hi + uh is split exactly by fast two-sum, because
+ * nk ln2_hi is exact and either 0 or larger than |uh|. uh rounds in an fma, so that no
+ * contraction feeds the unrounded num rcp to the two-sum, and products of nk are exact. The tail
+ * u^3 q(u^2) is a minimax fit to 2 atanh(u / 2) - u. */
+FP_INLINE float NEG_LOG_F32(float x) {
+    float mant;
+    uint32_t bits, ix;
+    memcpy(&bits, &x, 4);
+    ix = bits + 0x004afb0du;
+    float nk = (float)(127 - (int32_t)(ix >> 23)); /* -k */
+    ix = (ix & 0x007fffffu) + 0x3f3504f3u;
+    memcpy(&mant, &ix, 4);
+    float num = FMAF(mant, -2.0f, 2.0f), d = mant + 1.0f, dl = mant - (d - 1.0f);
+    float rcp = 1.0f / d, uh = FMAF(num, rcp, 0.0f);
+    float r = FMAF(-uh, dl, FMAF(-uh, d, num)), v = uh * uh;
+    float q = FMAF(v, FMAF(v, 0.0023109776f, 0.012496489f), 0.08333336f);
+    float a = nk * 0.693145751953125f, hi = a + uh, e = uh - (hi - a);
+    return hi + FMAF(uh * v, q, FMAF(r, rcp, FMAF(nk, 1.428606765330187e-06f, e)));
+}
+
 NOINLINE static void NORMAL_BLOCK_F32(const float *restrict u, float *restrict z, size_t m) {
 #if defined(__clang__)
 #pragma clang loop interleave_count(8)
 #endif
     for (size_t j = 0; j < m; j++) {
         float a = u[2u * j], b = u[2u * j + 1u];
-        float r = SQRTF(neg2_log_f32(1.0f - a));
+        float r = SQRTF(NEG2_LOG_F32(1.0f - a));
 
         /* Nearest quarter turn q, and the angle left over in [-pi/4, pi/4]. */
         int32_t q = (int32_t)(b * 4.0f + 0.5f);
@@ -790,14 +837,14 @@ NOINLINE static void EXPONENTIAL_BLOCK_F64(double *z, size_t m) {
 #if defined(__clang__)
 #pragma clang loop interleave_count(4)
 #endif
-    for (size_t j = 0; j < m; j++) z[j] = 0.5 * neg2_log_f64(1.0 - z[j]);
+    for (size_t j = 0; j < m; j++) z[j] = 0.5 * NEG2_LOG_F64(1.0 - z[j]);
 }
 
 NOINLINE static void EXPONENTIAL_BLOCK_F32(float *z, size_t m) {
 #if defined(__clang__)
 #pragma clang loop interleave_count(4)
 #endif
-    for (size_t j = 0; j < m; j++) z[j] = neg_log_f32(1.0f - z[j]);
+    for (size_t j = 0; j < m; j++) z[j] = NEG_LOG_F32(1.0f - z[j]);
 }
 
 /* ---- Float64 normals: the ziggurat ------------------------------------------------------ */
@@ -858,13 +905,13 @@ NOINLINE static double ZIG_SLOW(uint64_t r, fallback *f) {
         if (i == 0) { /* the tail beyond R, by Marsaglia's method */
             double a, b;
             do {
-                a = 0.5 * neg2_log_f64(1.0 - to_f64(fallback_next(f))) / ZIG_R;
-                b = 0.5 * neg2_log_f64(1.0 - to_f64(fallback_next(f)));
+                a = 0.5 * NEG2_LOG_F64(1.0 - to_f64(fallback_next(f))) / ZIG_R;
+                b = 0.5 * NEG2_LOG_F64(1.0 - to_f64(fallback_next(f)));
             } while (b + b < a * a);
             return (r >> 10) & 1u ? -(ZIG_R + a) : ZIG_R + a;
         }
         double y = ZIG_Y[i] + to_f64(fallback_next(f)) * (ZIG_Y[i + 1] - ZIG_Y[i]);
-        if (-0.5 * neg2_log_f64(y) < -0.5 * (x * x)) return x;
+        if (-0.5 * NEG2_LOG_F64(y) < -0.5 * (x * x)) return x;
         r = fallback_next(f);
     }
 }
@@ -932,6 +979,11 @@ NOINLINE static void ZIG_FILL_F64(tandem_rng *rng, double *out, size_t n, uint64
 #undef ZIG_SLOW
 #undef ZIG_RESOLVE
 #undef ZIG_FILL_F64
+#undef NEG2_LOG_F64
+#undef NEG2_LOG_F32
+#undef NEG_LOG_F32
+#undef FMA
+#undef FMAF
 
 #ifdef TANDEM_AVX2_PASS
 #undef lanes
