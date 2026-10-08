@@ -21,30 +21,32 @@ three passes. The EPYC session ran on one pinned core.
 
 | | EPYC 7702P | mt19937, EPYC | Philox4x32-10, EPYC |
 |---|---|---|---|
-| `tandem_fill_u32` | 8.6 | 1.2 | 1.1 |
-| `tandem_fill_u64` | 8.6 | 2.3 | 1.1 |
-| `tandem_fill_f32` | 7.7 | 1.1 | 1.0 |
-| `tandem_fill_f64` | 6.9 | 2.1 | 0.97 |
-| `tandem_fill_normal_f64` | 3.6 | 0.42 | - |
-| `tandem_fill_normal_f32` | 3.2 | 0.30 | - |
-| `tandem_fill_exponential_f64` | 3.4 | 0.65 | - |
-| `tandem_fill_exponential_f32` | 4.5 | 0.48 | - |
-| `tandem_next_f64` chain | 1.9 | 1.9 | 0.96 |
+| `tandem_fill_u32` | 8.9 | 1.1 | 1.1 |
+| `tandem_fill_u64` | 8.8 | 2.2 | 1.1 |
+| `tandem_fill_f32` | 8.4 | 0.72 | 1.0 |
+| `tandem_fill_f64` | 7.4 | 1.2 | 0.97 |
+| `tandem_fill_normal_f64` | 3.6 | 0.13 | - |
+| `tandem_fill_normal_f32` | 3.0 | 0.070 | - |
+| `tandem_fill_exponential_f64` | 3.4 | 0.46 | - |
+| `tandem_fill_exponential_f32` | 3.8 | 0.37 | - |
+| `tandem_next_f64` chain | 3.1 | 1.1 | 0.95 |
 
 The mt19937 column is `std::mt19937` for u32 and f32 and `std::mt19937_64` for u64 and f64,
 with `std::uniform_real_distribution`, `std::normal_distribution` and
 `std::exponential_distribution` of libc++ for the floats, from `tools/bench_std.cpp`. On the EPYC
-the same file built against libstdc++ ran about twice as fast as against libc++ on every row, so
-that column is libstdc++. Random123's Box-Muller on Philox wrote fewer normals in the same session. The Philox column is
+an earlier session found the same file about twice as fast against libstdc++ as against libc++
+on every row, so that column is libstdc++, GCC 14.4. Random123's Box-Muller on Philox wrote
+fewer normals in an earlier session. The Philox column is
 `tools/bench_philox.c`: Random123 1.14.0 `philox4x32` with 10 rounds, one block per call,
 written to the buffer with the bit-to-float maps of `tandem.c`. Clang does not vectorize its
-32x32-bit products, so it runs scalar. The EPYC chain row predates the inline scalar draws
-below.
+32x32-bit products, so it runs scalar. The chain row sums 2^24 `tandem_next_f64` draws,
+`std::uniform_real_distribution<double>` draws on `std::mt19937_64`, or Philox draws.
 
-The EPYC build is conda-forge clang 23.1 at plain `-O2` with no `-m` flags, so it runs the AVX2
-copy picked at run time. The base copy, which `TANDEM_NO_AVX2` selects, ran at the same speed in
-the same session, 8.7 GiB/s for `tandem_fill_u32` and 3.6 for `tandem_fill_normal_f64`, whose
-library `fma` calls stay in the rare slow path.
+The EPYC build is conda-forge clang 23.1.2 at plain `-O2` with no `-m` flags, so it runs the
+AVX2 copy picked at run time. The base copy, which `TANDEM_NO_AVX2` selects, ran at 6.0 GiB/s
+for `tandem_fill_u32` and 2.8 for `tandem_fill_normal_f64`, whose library `fma` calls stay in
+the rare slow path. In the Float32 normal and exponential loops every `fma` is a library call
+there, and those fills drop to 0.17 and 0.15.
 GCC 12 at `-O2` reaches 9.1 GiB/s for `tandem_fill_u32` and 3.2 for `tandem_fill_normal_f64`,
 but only 0.55 for `tandem_fill_normal_f32`. GCC honours `-fno-math-errno` only on the command
 line, not as a function attribute, so `sqrt` keeps its errno branch and the Box-Muller loop
