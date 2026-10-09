@@ -141,11 +141,13 @@ void tandem_block(const uint32_t key[4], uint64_t c, uint32_t j, uint32_t out[4]
  * Melquiond, IEEE Trans. Computers 57, 2008). Both equal the instruction bit for bit while
  * nothing underflows or overflows, which the arguments here never do. */
 FP_INLINE double round_to_odd(double s, double e) {
-    uint64_t b, step;
+    uint64_t b, away;
     memcpy(&b, &s, 8);
-    /* An inexact sum with an even last bit moves one ulp toward the exact one. */
-    step = (e > 0.0) == (s > 0.0) ? 1u : ~(uint64_t)0;
-    b += (e != 0.0 && !(b & 1u)) ? step : 0u;
+    /* An inexact sum with an even last bit moves one ulp toward the exact one, down when the
+     * error points to zero. Arithmetic, not a select: LLVM 23's loop vectorizer spent minutes on
+     * the select form in the f32 normal loop. */
+    away = (uint64_t)((e > 0.0) != (s > 0.0));
+    b += (uint64_t)((e != 0.0) & !(b & 1u)) * (1u - 2u * away);
     memcpy(&s, &b, 8);
     return s;
 }
