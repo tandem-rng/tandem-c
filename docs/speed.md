@@ -6,7 +6,9 @@
 
 Apple M4 and AMD EPYC 7702P, one thread, `make bench`, clang `-O2`, minimum of seven runs of
 2^24 elements, in GiB/s. Each machine's columns come from one session and give the median of
-three passes. The EPYC session ran on one pinned core.
+three passes. The EPYC session ran on one pinned core. A plain `make` gets these columns: on
+x86-64 it runs the AVX2 and FMA copy wherever the CPU has them. The arm64 object code is the
+same with the exact fma emulation of the base copy, so the M4 figures stand.
 
 | | M4 | M4 with `TANDEM_NO_SIMD` | mt19937, M4 | Philox4x32-10, M4 |
 |---|---|---|---|---|
@@ -43,10 +45,12 @@ written to the buffer with the bit-to-float maps of `tandem.c`. Clang does not v
 `std::uniform_real_distribution<double>` draws on `std::mt19937_64`, or Philox draws.
 
 The EPYC build is conda-forge clang 23.1.2 at plain `-O2` with no `-m` flags, so it runs the
-AVX2 copy picked at run time. The base copy, which `TANDEM_NO_AVX2` selects, ran at 6.0 GiB/s
-for `tandem_fill_u32` and 2.8 for `tandem_fill_normal_f64`, whose library `fma` calls stay in
-the rare slow path. In the Float32 normal and exponential loops every `fma` is a library call
-there, and those fills drop to 0.17 and 0.15.
+AVX2 copy picked at run time, whose code the exact fma emulation leaves unchanged. The base
+copy, which `TANDEM_NO_AVX2` selects, ran at 6.0 GiB/s for `tandem_fill_u32` and 2.8 for
+`tandem_fill_normal_f64` in that session, and its Float32 normal and exponential fills at 0.17
+and 0.15, with a library `fma` call per multiply-add. The base copy now rounds each
+multiply-add by the exact emulation in the vectorized loop instead, and its figures await a
+remeasure.
 GCC 12 at `-O2` reaches 9.1 GiB/s for `tandem_fill_u32` and 3.2 for `tandem_fill_normal_f64`,
 but only 0.55 for `tandem_fill_normal_f32`. GCC honours `-fno-math-errno` only on the command
 line, not as a function attribute, so `sqrt` keeps its errno branch and the Box-Muller loop
