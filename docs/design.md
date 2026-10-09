@@ -5,8 +5,8 @@
 On x86-64 with GCC 12+ or clang, `tandem.c` compiles the row loop, the ziggurat and the
 normal and exponential loops a second time for AVX2 and FMA and picks that copy at run time. A plain
 `-O2` build with no `-m` flags so gets 256-bit rows and hardware fused multiply-adds on
-Haswell, Zen and newer, and still runs on older CPUs, where `fma` is a library call that is
-correct but about seven times slower. With `-mavx2 -mfma` only the AVX2 copy remains.
+Haswell, Zen and newer, and still runs on older CPUs. With `-mavx2 -mfma` only the AVX2 copy
+remains.
 Define `TANDEM_NO_AVX2` to leave it out. Both copies give the same bits.
 
 The eight chunks of a row step together in registers. With GCC 12+ or clang the step is
@@ -55,7 +55,12 @@ with libm on 5e7 pairs, within 3.3 ulps. `make bench` reports the normal fills t
 Every multiply-add of the logarithm and of the f32 loop is an explicit `fma`, and the code is
 built with floating point contraction off, so every compiler and target produces the same
 bits: `tests/test_normal_bits.c` checks hashes of f64 and f32 normals against the values from
-the M4.
+the M4. Where the build has no FMA instruction, as the base copy on x86-64, `fma` and `fmaf`
+would be library calls that keep the loops scalar. There `tandem.c` rounds each multiply-add
+once by an exact emulation instead, so the base copy vectorizes and gives the same bits. The
+float form takes the product exactly in double and rounds the sum to odd before the rounding
+to float. The double form adds Dekker's exact product by two error-free sums, the last
+rounded to odd (Boldo and Melquiond, IEEE Trans. Computers 57, 2008).
 
 ## Exponentials
 
