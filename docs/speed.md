@@ -1,4 +1,4 @@
-# Speed
+# Performance
 
 `make bench` produces the CPU figures, Philox included, and `make bench-target` the GPU figures.
 

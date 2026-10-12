@@ -8,7 +8,7 @@ fills on CPUs and OpenMP target fills on GPUs.
   parallel use.
 - [Design](design.md): how the fills, bounded integers, normals and exponentials work.
 - [Tests](tests.md): what the suite checks, where the fixtures come from, and what CI runs.
-- [Speed](speed.md): CPU and offload figures, and the standard generators.
+- [Performance](speed.md): CPU and offload figures, and the standard generators.
 
 ## Install
 
