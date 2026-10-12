@@ -10,13 +10,17 @@ Reference C and C++ implementation of [Tandem8x32](https://github.com/tandem-rng
 noncryptographic pseudorandom number generator. It produces the stream the specification
 defines, bit for bit, with SIMD fills on CPUs and OpenMP target fills on GPUs.
 
-Build with `make`, or compile `tandem.c` into your project with `-ffp-contract=off` and no fast-math. The library needs C11, C++17 and libm.
+## Install
+
+Build with `make`, or compile `tandem.c` into your project with `-ffp-contract=off` and no fast-math.
 
 ```sh
 make                              # libtandem.a, built with clang
 make install PREFIX=<prefix>      # libtandem.a, tandem.h, tandem.hpp, tandem.pc
 make test
 ```
+
+## Quick start
 
 ```c
 #include "tandem.h"
@@ -34,9 +38,15 @@ double z = tandem_normal_f64(&worker);            /* ziggurat; link with -lm */
   run time. Without them, the base copy rounds each fused multiply-add by an exact emulation,
   with the same bits and no library call.
 
+## Requirements
+
+The library needs C11, C++17 and libm.
+
+## Documentation
+
 See [API](docs/api.md) for the C++ `<random>` engine, MPI and OpenMP offload, and
 [design](docs/design.md), [tests](docs/tests.md) and [speed](docs/speed.md) for the rest.
 
 Portions of the code were generated with the assistance of LLMs.
 
-[Documentation](https://tandem-rng.github.io/tandem-c/) · [Apache 2.0 license](LICENSE)
+[Docs](https://tandem-rng.github.io/tandem-c/) · [Specification](https://github.com/tandem-rng/spec/blob/main/SPEC.md) · [Website](https://tandem-rng.github.io/) · [Issues](https://github.com/tandem-rng/tandem-c/issues) · [License](LICENSE)
