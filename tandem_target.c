@@ -11,7 +11,7 @@
 
 #include "tandem.h"
 
-#pragma omp declare target
+#pragma omp begin declare target
 #include "tandem123.h"
 
 /* The same maps as tandem.c: the top 24 or 53 bits of a draw, scaled. */
