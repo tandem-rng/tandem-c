@@ -6,6 +6,7 @@
  *
  * Copyright 2026 Jessica Cox. Apache License 2.0, see LICENSE. */
 #ifdef TANDEM_OPENMP_TARGET
+#include <errno.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -27,6 +28,10 @@ enum { MODE_RAW, MODE_F32, MODE_F64 };
  * 16 l + 15 of it. Elements outside the range, in the first and last rows, are skipped. */
 static void fill_target(tandem_rng *rng, void *out, size_t n, unsigned w, int mode, int device) {
     uint64_t p = (rng->pos + w - 1u) & ~((uint64_t)w - 1u);
+    if (p < rng->pos || n > (UINT64_MAX - p) / w || n > SIZE_MAX / (w / 8u)) {
+        errno = ERANGE;
+        return;
+    }
     uint64_t start = p >> 3, end = start + (uint64_t)n * (w / 8u);
     uint32_t K = rng->K, shift = 0;
     tandem4x32_key_t key = {{rng->key[0], rng->key[1], rng->key[2], rng->key[3]}};

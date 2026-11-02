@@ -2,6 +2,7 @@
 /* Tandem8x32 reference implementation. See tandem.h and the specification. */
 #include "tandem.h"
 
+#include <errno.h>
 #include <math.h>
 #include <string.h>
 #if defined(__x86_64__) && !defined(TANDEM_NO_SIMD) && !defined(TANDEM_NO_AVX2) &&              \
@@ -1163,10 +1164,27 @@ void tandem_next_c64(tandem_rng *rng, double out[2]) {
 
 /* ---- Public: fills ---------------------------------------------------------------------- */
 
+/* Check the whole span before changing the generator or output. bits is the consumed width,
+ * which may exceed the alignment (complex values and Float32 normal pairs). */
+static bool start_fill(tandem_rng *rng, size_t n, unsigned bits, unsigned alignment) {
+    uint64_t p = align_pos(rng->pos, alignment);
+    if (p < rng->pos || n > (UINT64_MAX - p) / bits) {
+        errno = ERANGE;
+        return false;
+    }
+    rng->pos = p;
+    return true;
+}
+
 /* After alignment to its width, every integer fill is the same little-endian byte stream:
  * single bytes up to the first row boundary, whole rows from run_rows, single bytes after. */
-static void fill_raw(tandem_rng *rng, void *out, size_t n, unsigned w) {
-    uint64_t p = align_pos(rng->pos, w);
+static bool fill_raw(tandem_rng *rng, void *out, size_t n, unsigned w) {
+    if (n > SIZE_MAX / (w / 8u)) {
+        errno = ERANGE;
+        return false;
+    }
+    if (!start_fill(rng, n, w, w)) return false;
+    uint64_t p = rng->pos;
     size_t nbytes = n * (w / 8u);
     char *dst = out;
 
@@ -1180,6 +1198,7 @@ static void fill_raw(tandem_rng *rng, void *out, size_t n, unsigned w) {
         nbytes -= nrows * 128u;
     }
     for (; nbytes; nbytes--, p += 8u) *dst++ = (char)read(rng, p, 8);
+    return true;
 }
 
 void tandem_fill_u8(tandem_rng *rng, uint8_t *out, size_t n) { fill_raw(rng, out, n, 8); }
@@ -1189,6 +1208,7 @@ void tandem_fill_u64(tandem_rng *rng, uint64_t *out, size_t n) { fill_raw(rng, o
 void tandem_fill_u128(tandem_rng *rng, tandem_u128 *out, size_t n) { fill_raw(rng, out, n, 128); }
 
 void tandem_fill_bool(tandem_rng *rng, bool *out, size_t n) {
+    if (!start_fill(rng, n, 1, 1)) return;
     for (size_t i = 0; i < n; i++) out[i] = tandem_next_bool(rng);
 }
 
@@ -1203,7 +1223,7 @@ static size_t fill_rows(tandem_rng *rng, void *out, size_t n, unsigned w, store_
 }
 
 void tandem_fill_f32(tandem_rng *rng, float *out, size_t n) {
-    rng->pos = align_pos(rng->pos, 32);
+    if (!start_fill(rng, n, 32, 32)) return;
     for (; n && (rng->pos & 1023u); n--) *out++ = tandem_next_f32(rng);
     size_t rest = fill_rows(rng, out, n, 32, STORE_F32);
     out += n - rest;
@@ -1211,7 +1231,7 @@ void tandem_fill_f32(tandem_rng *rng, float *out, size_t n) {
 }
 
 void tandem_fill_f64(tandem_rng *rng, double *out, size_t n) {
-    rng->pos = align_pos(rng->pos, 64);
+    if (!start_fill(rng, n, 64, 64)) return;
     for (; n && (rng->pos & 1023u); n--) *out++ = tandem_next_f64(rng);
     size_t rest = fill_rows(rng, out, n, 64, STORE_F64);
     out += n - rest;
@@ -1219,16 +1239,31 @@ void tandem_fill_f64(tandem_rng *rng, double *out, size_t n) {
 }
 
 void tandem_fill_f16_bits(tandem_rng *rng, uint16_t *out, size_t n) {
-    fill_raw(rng, out, n, 16);
+    if (!fill_raw(rng, out, n, 16)) return;
     for (size_t i = 0; i < n; i++) out[i] = to_f16_bits(out[i]);
 }
 
 void tandem_fill_char(tandem_rng *rng, uint32_t *out, size_t n) {
+    if (!start_fill(rng, n, 64, 64)) return;
     for (size_t i = 0; i < n; i++) out[i] = tandem_next_char(rng);
 }
 
-void tandem_fill_c32(tandem_rng *rng, float *out, size_t n) { tandem_fill_f32(rng, out, 2u * n); }
-void tandem_fill_c64(tandem_rng *rng, double *out, size_t n) { tandem_fill_f64(rng, out, 2u * n); }
+void tandem_fill_c32(tandem_rng *rng, float *out, size_t n) {
+    if (n > SIZE_MAX / 2u) {
+        errno = ERANGE;
+        return;
+    }
+    if (!start_fill(rng, n, 64, 32)) return;
+    tandem_fill_f32(rng, out, 2u * n);
+}
+void tandem_fill_c64(tandem_rng *rng, double *out, size_t n) {
+    if (n > SIZE_MAX / 2u) {
+        errno = ERANGE;
+        return;
+    }
+    if (!start_fill(rng, n, 128, 64)) return;
+    tandem_fill_f64(rng, out, 2u * n);
+}
 
 /* ---- Public: bounded integers ------------------------------------------------------------ */
 
@@ -1308,6 +1343,7 @@ void tandem_fill_u32_below(tandem_rng *rng, uint32_t *out, size_t len, uint32_t 
     uint32_t key[4], K = rng->K;
     uint64_t first;
     if (len == 0) return; /* the plain fill would align the position */
+    if (!start_fill(rng, len, 32, 32)) return;
     memcpy(key, rng->key, 16);
     first = align_pos(rng->pos, 32) >> 5;
     tandem_fill_u32(rng, out, len);
@@ -1328,6 +1364,7 @@ void tandem_fill_u64_below(tandem_rng *rng, uint64_t *out, size_t len, uint64_t 
     uint32_t key[4], K = rng->K;
     uint64_t first;
     if (len == 0) return;
+    if (!start_fill(rng, len, 64, 64)) return;
     memcpy(key, rng->key, 16);
     first = align_pos(rng->pos, 64) >> 6;
     tandem_fill_u64(rng, out, len);
@@ -1369,8 +1406,8 @@ static uint64_t ceil_scaled(double w, int t) {
 /* The scale puts the mass total just below 2^63 for weights of any magnitude, from a first
  * pass at a scale that cannot overflow. The pairing is Vose's alias method in exact integers,
  * in place: cut[] holds the masses until a column is paired. */
-bool tandem_choice_build(tandem_choice_table *table, const double *weights, size_t m,
-                         uint64_t *cut, uint32_t *alias) {
+bool tandem_choice_build(tandem_choice_table *table, const double *weights, size_t m, uint64_t *cut,
+                         uint32_t *alias) {
     double wmax = 0;
     uint64_t total = 0, s;
     size_t i, l, big = 0;
@@ -1395,14 +1432,15 @@ bool tandem_choice_build(tandem_choice_table *table, const double *weights, size
     s = (total + m - 1u) / m;
     cut[big] += s * m - total;
 
-    for (l = 0; cut[l] < s; l++) {}
+    for (l = 0; cut[l] < s; l++) {
+    }
     for (i = 0; i < m; i++)
         for (size_t j = i; j <= i && cut[j] < s;) {
             alias[j] = (uint32_t)l;
             cut[l] -= s - cut[j];
             j = l;
-            if (cut[l] < s)
-                do l++;
+            if (cut[l] < s) do
+                    l++;
                 while (l < m && cut[l] < s);
         }
     table->capacity = s;
@@ -1423,9 +1461,10 @@ uint32_t tandem_choice(tandem_rng *rng, const tandem_choice_table *table) {
 
 #define CHOICE_BLOCK 512u
 
-void tandem_fill_choice(tandem_rng *rng, uint32_t *out, size_t n, const tandem_choice_table *table) {
+void tandem_fill_choice(tandem_rng *rng, uint32_t *out, size_t n,
+                        const tandem_choice_table *table) {
     uint64_t r[CHOICE_BLOCK];
-    rng->pos = align_pos(rng->pos, 64); /* an empty fill only aligns */
+    if (!start_fill(rng, n, 64, 64)) return;
     while (n) {
         size_t k = n < CHOICE_BLOCK ? n : CHOICE_BLOCK;
         tandem_fill_u64(rng, r, k);
@@ -1454,8 +1493,8 @@ double tandem_normal_f64(tandem_rng *rng) {
 }
 
 void tandem_fill_normal_f64(tandem_rng *rng, double *out, size_t n) {
-    uint64_t p = align_pos(rng->pos, 64);
-    rng->pos = p; /* an empty fill only aligns */
+    if (!start_fill(rng, n, 64, 64)) return;
+    uint64_t p = rng->pos;
     zig_fill_f64(rng, out, n, p >> 6);
 }
 
@@ -1479,6 +1518,7 @@ float tandem_normal_f32(tandem_rng *rng) {
 #define NORMAL_BLOCK 256u
 
 void tandem_fill_normal_f32(tandem_rng *rng, float *out, size_t n) {
+    if (n == 0 || !start_fill(rng, n / 2u + n % 2u, 64, 32)) return;
     float u[2u * NORMAL_BLOCK];
     size_t pairs = n / 2u;
     while (pairs) {
@@ -1507,6 +1547,7 @@ float tandem_exponential_f32(tandem_rng *rng) {
 #define EXPONENTIAL_BLOCK 1024u
 
 void tandem_fill_exponential_f64(tandem_rng *rng, double *out, size_t n) {
+    if (n == 0 || !start_fill(rng, n, 64, 64)) return;
     while (n) {
         size_t m = n < EXPONENTIAL_BLOCK ? n : EXPONENTIAL_BLOCK;
         tandem_fill_f64(rng, out, m);
@@ -1517,6 +1558,7 @@ void tandem_fill_exponential_f64(tandem_rng *rng, double *out, size_t n) {
 }
 
 void tandem_fill_exponential_f32(tandem_rng *rng, float *out, size_t n) {
+    if (n == 0 || !start_fill(rng, n, 32, 32)) return;
     while (n) {
         size_t m = n < EXPONENTIAL_BLOCK ? n : EXPONENTIAL_BLOCK;
         tandem_fill_f32(rng, out, m);

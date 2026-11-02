@@ -133,7 +133,11 @@ double tandem_normal_f64(tandem_rng *rng);
 float tandem_normal_f32(tandem_rng *rng);
 void tandem_normal2_f32(tandem_rng *rng, float out[2]);
 
-/* Fills: n aligned elements, the same values as n scalar draws. */
+/* Fills: n aligned elements, the same values as n scalar draws. A fill whose alignment or
+ * consumed span exceeds the unsigned 64-bit stream leaves the generator and output unchanged
+ * and sets errno to ERANGE. Clear errno before a call when checking for this failure.
+ * The caller supplies storage for n output elements. This span rule also applies to the
+ * bounded, normal, exponential and choice fills below. */
 void tandem_fill_bool(tandem_rng *rng, bool *out, size_t n);
 void tandem_fill_u8(tandem_rng *rng, uint8_t *out, size_t n);
 void tandem_fill_u16(tandem_rng *rng, uint16_t *out, size_t n);
