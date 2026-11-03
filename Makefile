@@ -134,7 +134,7 @@ cross: tools/gen_cross
 install: libtandem.a
 	install -d $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(INCLUDEDIR)
 	install -m 644 libtandem.a $(DESTDIR)$(LIBDIR)
-	install -m 644 tandem.h tandem.hpp $(DESTDIR)$(INCLUDEDIR)
+	install -m 644 tandem.h tandem.hpp tandem123.h $(DESTDIR)$(INCLUDEDIR)
 	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCLUDEDIR@|$(INCLUDEDIR)|' \
 	    -e 's|@VERSION@|$(VERSION)|' packaging/tandem.pc.in > $(DESTDIR)$(LIBDIR)/pkgconfig/tandem.pc
 
