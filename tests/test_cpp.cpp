@@ -70,6 +70,37 @@ int main() {
     }
 
     {
+        tandem::rng h(42);
+        h.next<bool>();
+        auto same = h;
+        h.discard(0);
+        CHECK(h == same && h() == same());
+        const auto boundary = std::uint64_t{1} << 63;
+        CHECK(h.set_position(boundary - 65));
+        same = h;
+        same();
+        h.discard(1);
+        CHECK(h.position() == boundary && h == same && h() == same());
+        h.discard((UINT64_MAX - h.position()) / 64u);
+        same = h;
+        errno = 0;
+        h.discard(1);
+        CHECK(h == same && errno == ERANGE);
+        bool threw = false;
+        try {
+            h.fill<double>(1);
+        } catch (const std::out_of_range &) {
+            threw = true;
+        }
+        CHECK(threw && h == same);
+        tandem::rng last(42);
+        last.discard((UINT64_MAX - 127u) / 64u);
+        tandem_rng reference = tandem_seed(42, 0, 0);
+        reference = tandem_from_key(reference.key, UINT64_MAX - 127u, reference.K);
+        CHECK(last() == tandem_next_u64(&reference));
+    }
+
+    {
         // <random> distributions compile and run; the mean of a uniform is near one half.
         std::uniform_real_distribution<double> uni(0.0, 1.0);
         std::normal_distribution<double> gauss(0.0, 1.0);
