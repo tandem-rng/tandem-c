@@ -1,5 +1,6 @@
 /* Functions beyond the specification's draws: positioning, bounded integers, normals,
  * exponentials. */
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -336,6 +337,10 @@ static void test_empty_fills(void) {
         CHECK(tandem_position(&g) == pos[i]);
         tandem_fill_normal_f64(&g, &d, 0);
         CHECK(tandem_position(&g) == ((pos[i] + 63u) & ~(uint64_t)63u) && d == 2);
+        tandem_set_position(&g, pos[i]);
+        u32 = 123;
+        tandem_fill_char(&g, &u32, 0);
+        CHECK(tandem_position(&g) == ((pos[i] + 63u) & ~(uint64_t)63u) && u32 == 123);
     }
     /* The n = 0 cases of the spec's conformance fixtures, one fill at a time from the key of
      * seed 42 at bit 33. */
@@ -375,6 +380,81 @@ static void test_empty_fills(void) {
             CHECK(tandem_position(&h) == 64);
         }
     }
+}
+
+/* Small, correctly sized outputs near the unsigned stream end. A request is rejected before
+ * writing its first element, even if that element alone would fit. The internal position
+ * transport reconstruction models a successor state reached from a valid initial position. */
+static void test_fill_ends(void) {
+    tandem_rng g, before;
+    union {
+        bool b[128];
+        uint8_t u8[16];
+        uint16_t u16[8];
+        uint32_t u32[4];
+        uint64_t u64[2];
+        tandem_u128 u128[1];
+        float f32[4];
+        double f64[2];
+    } out, saved;
+    const double weights[2] = {1, 2};
+    uint64_t cut[2];
+    uint32_t alias[2];
+    tandem_choice_table table;
+    CHECK(tandem_choice_build(&table, weights, 2, cut, alias));
+#define REJECT_FILL(position, call)                                                                \
+    do {                                                                                           \
+        g = tandem_seed(42, 0, 0);                                                                 \
+        g = tandem_from_key(g.key, (position), g.K);                                               \
+        memcpy(&before, &g, sizeof g);                                                             \
+        memset(&out, 0xa5, sizeof out);                                                            \
+        memcpy(&saved, &out, sizeof out);                                                          \
+        errno = 0;                                                                                 \
+        call;                                                                                      \
+        CHECK(errno == ERANGE);                                                                    \
+        CHECK(memcmp(&g, &before, sizeof g) == 0);                                                 \
+        CHECK(memcmp(&out, &saved, sizeof out) == 0);                                              \
+    } while (0)
+    const uint64_t p = UINT64_MAX - 127u;
+    REJECT_FILL(p, tandem_fill_bool(&g, out.b, 128));
+    REJECT_FILL(p, tandem_fill_u8(&g, out.u8, 16));
+    REJECT_FILL(p, tandem_fill_u16(&g, out.u16, 8));
+    REJECT_FILL(p, tandem_fill_u32(&g, out.u32, 4));
+    REJECT_FILL(p, tandem_fill_u64(&g, out.u64, 2));
+    REJECT_FILL(p, tandem_fill_u128(&g, out.u128, 1));
+    REJECT_FILL(p, tandem_fill_f16_bits(&g, out.u16, 8));
+    REJECT_FILL(p, tandem_fill_f32(&g, out.f32, 4));
+    REJECT_FILL(p, tandem_fill_f64(&g, out.f64, 2));
+    REJECT_FILL(p, tandem_fill_char(&g, out.u32, 2));
+    REJECT_FILL(p, tandem_fill_c32(&g, out.f32, 2));
+    REJECT_FILL(p, tandem_fill_c64(&g, out.f64, 1));
+    REJECT_FILL(p, tandem_fill_u32_below(&g, out.u32, 4, 7));
+    REJECT_FILL(p, tandem_fill_u64_below(&g, out.u64, 2, 7));
+    REJECT_FILL(p, tandem_fill_normal_f32(&g, out.f32, 3));
+    REJECT_FILL(p, tandem_fill_normal_f64(&g, out.f64, 2));
+    REJECT_FILL(p, tandem_fill_exponential_f32(&g, out.f32, 4));
+    REJECT_FILL(p, tandem_fill_exponential_f64(&g, out.f64, 2));
+    REJECT_FILL(p, tandem_fill_choice(&g, out.u32, 2, &table));
+    REJECT_FILL(UINT64_MAX, tandem_fill_u8(&g, out.u8, 0));
+    REJECT_FILL(UINT64_MAX, tandem_fill_char(&g, out.u32, 0));
+    REJECT_FILL(UINT64_MAX, tandem_fill_normal_f64(&g, out.f64, 0));
+    REJECT_FILL(UINT64_MAX - 95u, tandem_fill_normal_f32(&g, out.f32, 3));
+#undef REJECT_FILL
+    g = tandem_seed(42, 0, 0);
+    g = tandem_from_key(g.key, p, g.K);
+    before = g;
+    tandem_fill_u64(&g, out.u64, 1);
+    CHECK(out.u64[0] == tandem_next_u64(&before));
+    CHECK(g.pos == UINT64_MAX - 63u && g.pos == before.pos);
+    g.pos = UINT64_MAX - 1u;
+    before = g;
+    tandem_fill_bool(&g, out.b, 1);
+    CHECK(out.b[0] == tandem_next_bool(&before) && g.pos == UINT64_MAX);
+    g.pos = UINT64_MAX - 95u; /* odd Float32 draw index: one pair still fits. */
+    before = g;
+    tandem_fill_normal_f32(&g, out.f32, 1);
+    CHECK(out.f32[0] == tandem_normal_f32(&before));
+    CHECK(g.pos == UINT64_MAX - 31u && g.pos == before.pos);
 }
 
 /* Exponentials of tandem-cuda's core.hpp, whose polynomial logarithm is this library's on the
@@ -588,6 +668,7 @@ int main(void) {
     test_normal_fills_f64();
     test_normal_fills_f32();
     test_empty_fills();
+    test_fill_ends();
     test_exponential_cross();
     test_exponential_fills();
     test_exponential_stats();
