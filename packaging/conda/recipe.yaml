@@ -29,6 +29,7 @@ tests:
       include:
         - tandem.h
         - tandem.hpp
+        - tandem123.h
       files:
         - lib/pkgconfig/tandem.pc
   - script:

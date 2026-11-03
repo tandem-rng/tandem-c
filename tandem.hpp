@@ -7,6 +7,7 @@
 #define TANDEM_HPP
 
 #include <array>
+#include <cerrno>
 #include <cstddef>
 #include <complex>
 #include <cstdint>
@@ -101,9 +102,18 @@ public:
     }
 
     /* Skip z 64-bit draws in constant time: the generator is counter based, so this is a move
-     * of the position. */
+     * of the position. Zero draws leave the generator unchanged. A span past the stream also
+     * leaves it unchanged and sets errno to ERANGE, like the C fills. */
     void discard(unsigned long long z) noexcept {
-        set_position(((position() + 63u) & ~std::uint64_t{63}) + 64u * z);
+        if (z == 0) return;
+        const auto p = (position() + 63u) & ~std::uint64_t{63};
+        if (p < position() || z > (UINT64_MAX - p) / 64u) {
+            errno = ERANGE;
+            return;
+        }
+        s_.pos = p + 64u * z;
+        s_.base = ((s_.pos >> 10) - 1u) << 10;
+        s_.cached = 0u;
     }
 
     /* The transport form as six decimal words: the key, the position, the chunk length. */
@@ -178,6 +188,7 @@ public:
         tandem_fill_choice(&s_, out, n, &c);
     }
     std::vector<std::uint32_t> fill_choice(const choice_table &t, std::size_t n) {
+        check_fill(n, 64);
         std::vector<std::uint32_t> v(n);
         fill_choice(t, v.data(), n);
         return v;
@@ -219,6 +230,7 @@ public:
     }
 
     template <class T> std::vector<T> fill(std::size_t n) {
+        check_fill(n, std::is_same_v<T, bool> ? 1u : 8u * sizeof(T));
         std::vector<T> v(n);
         fill(v.data(), n);
         return v;
@@ -247,6 +259,11 @@ public:
     friend bool operator!=(const rng &a, const rng &b) noexcept { return !(a == b); }
 
 private:
+    void check_fill(std::size_t n, unsigned w) const {
+        const auto p = (position() + w - 1u) & ~(std::uint64_t{w} - 1u);
+        if (p < position() || n > (UINT64_MAX - p) / w)
+            throw std::out_of_range("fill passes the end of the stream");
+    }
     explicit rng(const tandem_rng &s) noexcept : s_(s) {}
     tandem_rng s_;
 };

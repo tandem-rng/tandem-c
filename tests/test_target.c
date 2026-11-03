@@ -5,6 +5,7 @@
 #ifndef TANDEM_OPENMP_TARGET
 #define TANDEM_OPENMP_TARGET
 #endif
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,6 +88,19 @@ static void compare(const char *name, host_fill hf, dev_fill df, size_t es) {
                 free(want);
                 free(got);
             }
+    /* A whole request that crosses the unsigned endpoint writes no prefix. */
+    tandem_rng g = tandem_from_key(key, 0, 32);
+    unsigned char before[16], after[16];
+    void *out = dev_alloc(sizeof before);
+    df(&g, out, sizeof before / es, device);
+    dev_get(before, out, sizeof before);
+    g = tandem_from_key(key, UINT64_MAX - 127u, 32);
+    errno = 0;
+    df(&g, out, sizeof before / es, device);
+    CHECK(errno == ERANGE && g.pos == UINT64_MAX - 127u);
+    dev_get(after, out, sizeof after);
+    CHECK(memcmp(before, after, sizeof before) == 0);
+    dev_free(out);
 }
 
 int main(void) {

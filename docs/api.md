@@ -34,6 +34,11 @@ uint32_t pick = tandem_choice(&rng, &t);           /* 2 with probability 0.7 */
   binary16 bit patterns, Unicode scalars, complex pairs. Scalar draws and `tandem_fill_*`.
   Signed integers are the unsigned draws reinterpreted. Random access does not advance.
 - `tandem_set_position`, `tandem_split`, `tandem_fork`, `tandem_sub`, `tandem_from_key`.
+  Initial positions stay below `2^63`. Draws can produce unsigned successor positions above
+  that bound. A fill that would exceed `UINT64_MAX` bits, including alignment, leaves the
+  generator and output unchanged and sets `errno` to `ERANGE`. Clear `errno` before checking
+  a call. Callers supply storage for the requested output elements. Allocating C++ fills
+  throw `std::out_of_range` for such a span.
 - Bounded integers `tandem_u32_below`, `tandem_u64_below` and `tandem_fill_u32_below`,
   `tandem_fill_u64_below`. A fill cut anywhere equals the whole fill.
 - Normals `tandem_normal_f64`, `tandem_normal_f32`, `tandem_normal2_f32`,
